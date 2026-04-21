@@ -210,14 +210,21 @@ def _translate_to_es(ranked: list[RankedNewsItem]) -> None:
         for r in ranked:
             try:
                 r.item.title_es = translator.translate(r.item.title)
+                # Traducir también el resumen completo
+                if r.item.summary_es:
+                    r.item.summary_es = translator.translate(r.item.summary_es[:4999])
                 if r.item.insight and r.item.insight.que_paso:
                     r.item.insight.que_paso = translator.translate(
                         r.item.insight.que_paso[:4999]
                     )
+                if r.item.insight and r.item.insight.afectados:
+                    r.item.insight.afectados = translator.translate(
+                        r.item.insight.afectados[:4999]
+                    )
             except Exception as exc:
                 logger.warning("No se pudo traducir '%s': %s", r.item.title[:50], exc)
                 r.item.title_es = r.item.title  # fallback al inglés original
-        logger.info("Títulos traducidos al español.")
+        logger.info("Traducciones al español completadas.")
     except ImportError:
         logger.warning("deep-translator no instalado. Usando títulos en inglés.")
         for r in ranked:
@@ -251,7 +258,7 @@ def _generate_summaries_es(ranked: list[RankedNewsItem]) -> None:
 def _template_summary(item: NewsItem) -> str:
     date_str = item.published_at.strftime("%d/%m/%Y")
     kw = ", ".join(item.keywords_found[:3]) if item.keywords_found else "ciberseguridad"
-    raw = item.summary[:180].strip()
+    raw = item.summary.strip()
     tail = "." if raw and not raw.endswith((".", "!", "?")) else ""
     return (
         f"**{item.source_name}** ({date_str}): {item.title}. "

@@ -327,7 +327,7 @@ def enrich_item(item: NewsItem) -> StructuredInsight:
     # ── Qué pasó ──────────────────────────────────────────────────────
     # Usamos las primeras 2 oraciones del artículo o el resumen RSS
     sentences = re.split(r"(?<=[.!?])\s+", (full_text or item.summary).strip())
-    que_paso = " ".join(sentences[:2]).strip()[:320]
+    que_paso = " ".join(sentences[:5]).strip()[:800]
     if not que_paso:
         que_paso = item.summary[:280].strip()
 

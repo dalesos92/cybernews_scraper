@@ -81,7 +81,7 @@ class Renderer:
                     "published_at": r.item.published_at.isoformat(),
                     "score": round(r.score, 2),
                     "keywords_found": r.item.keywords_found,
-                    "summary_es": r.item.summary_es or r.item.summary[:300],
+                    "summary_es": r.item.summary_es or r.item.summary,
                     "analisis": (
                         {
                             "afectados": r.item.insight.afectados,
