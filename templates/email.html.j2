@@ -69,14 +69,9 @@
                       <a href="{{ r.item.url }}"
                          style="color:#003B73;text-decoration:none;
                                 vertical-align:middle;">
-                        {{ r.item.title_es or r.item.title }}
+                        {{ r.item.title }}
                       </a>
                     </h2>
-                    {% if r.item.title_es and r.item.title_es != r.item.title %}
-                    <p style="margin:0 0 8px;color:#888888;font-size:12px;font-style:italic;">
-                      {{ r.item.title }}
-                    </p>
-                    {% endif %}
 
                     <!-- Meta: fuente, fecha, score -->
                     <p style="margin:0 0 10px;color:#666666;font-size:13px;">
@@ -147,7 +142,7 @@
                     {% else %}
                     <p style="margin:0 0 12px;color:#333333;font-size:14px;
                                line-height:1.65;">
-                      {{ r.item.summary_es or r.item.summary[:300] }}
+                      {{ r.item.summary_es or r.item.summary }}
                     </p>
                     {% endif %}
 

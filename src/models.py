@@ -31,8 +31,6 @@ class NewsItem(BaseModel):
     keywords_found: list[str] = Field(default_factory=list)
     # Resumen en español: generado por plantilla o LLM
     summary_es: str = ""
-    # Título traducido al español
-    title_es: str = ""
     # Desglose estructurado generado por el enriquecedor
     insight: Optional[StructuredInsight] = None
 

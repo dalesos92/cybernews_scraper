@@ -75,7 +75,6 @@ class Renderer:
                 {
                     "rank": r.rank,
                     "title": r.item.title,
-                    "title_es": r.item.title_es or r.item.title,
                     "url": r.item.url,
                     "source": r.item.source_name,
                     "published_at": r.item.published_at.isoformat(),
@@ -121,10 +120,8 @@ class Renderer:
                 if item.keywords_found
                 else "—"
             )
-            title_display = item.title_es or item.title
             lines += [
-                f"\n## {r.rank}. {title_display}",
-                f"_{item.title}_" if item.title_es else "",
+                f"\n## {r.rank}. {item.title}",
                 "",
                 f"| Campo | Valor |",
                 f"|---|---|",
@@ -232,7 +229,7 @@ class Renderer:
                 </tr>
               </table>"""
             else:
-                summary = item.summary_es or item.summary[:300]
+                summary = item.summary_es or item.summary
                 analysis_html = (
                     f'<p style="margin:0 0 10px 0;color:#333;font-size:14px;'
                     f'line-height:1.6;">{summary}</p>'
