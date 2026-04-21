@@ -14,6 +14,15 @@ env/
 .env
 *.env
 
+# Service Account keys — NUNCA commitear estos archivos
+*-service-account*.json
+*_service_account*.json
+sa-key*.json
+sa_key*.json
+service-account*.json
+service_account*.json
+gcloud-sa-*.json
+
 # Output generado (los HTML/JSON/MD se regeneran en cada ejecución)
 output/
 

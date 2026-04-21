@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 
 from src.config import settings
 from src.dedup import deduplicate, filter_already_sent
+from src.drive_uploader import upload_artifacts
 from src.enricher import enrich_ranked
 from src.enricher import _clean_summary
 from src.models import NewsItem, RankedNewsItem
@@ -204,7 +205,13 @@ def run(
     # 9. Persistir en BD
     storage.save_sent_items([r.item for r in ranked], batch_id=batch_id)
 
-    # 10. Enviar notificaciones
+    # 10. Subir artefactos a Google Drive (si está configurado)
+    _upload_to_drive(renderer)
+
+    # 11. Disparar Apps Script Web App para envío (si está configurado)
+    _trigger_appscript_send()
+
+    # 12. Enviar notificaciones
     if not skip_send:
         subject = get_subject()
         EmailSender().send(html_path)
@@ -272,6 +279,101 @@ def _openai_summaries(ranked: list[RankedNewsItem]) -> None:
             temperature=0.3,
         )
         item.summary_es = resp.choices[0].message.content.strip()
+
+
+# ── Google Apps Script webhook ────────────────────────────────────────
+
+
+def _trigger_appscript_send() -> None:
+    """Llama al endpoint doPost del Web App de Apps Script para disparar el envío.
+
+    Requiere GOOGLE_APPSCRIPT_WEBHOOK_URL en .env (URL del Web App desplegado).
+    Si GOOGLE_APPSCRIPT_TOKEN está definido, lo incluye en el cuerpo JSON.
+    Si la URL no está configurada, se omite silenciosamente.
+    """
+    logger = logging.getLogger(__name__)
+
+    if not settings.google_appscript_webhook_url:
+        logger.debug(
+            "GOOGLE_APPSCRIPT_WEBHOOK_URL no configurado. "
+            "Se omite trigger de Apps Script."
+        )
+        return
+
+    payload = {"token": settings.google_appscript_token or ""}
+    try:
+        import httpx
+        resp = httpx.post(
+            settings.google_appscript_webhook_url,
+            json=payload,
+            timeout=30,
+            follow_redirects=True,
+        )
+        data = resp.json()
+        if data.get("status") == 200:
+            logger.info("Apps Script: %s", data.get("message", "OK"))
+        else:
+            logger.warning(
+                "Apps Script respondió con error %s: %s",
+                data.get("status"),
+                data.get("message"),
+            )
+    except Exception as exc:
+        logger.error("Error llamando al webhook de Apps Script: %s", exc, exc_info=True)
+
+
+# ── Google Drive upload ───────────────────────────────────────────────
+
+
+def _upload_to_drive(renderer: "Renderer") -> None:
+    """Sube HTML + JSON a Google Drive.
+
+    Autenticación (en orden):
+    1. GOOGLE_SA_KEY_PATH definido en .env → usa esa clave explícita.
+    2. Sin GOOGLE_SA_KEY_PATH → usa Application Default Credentials (ADC),
+       es decir, la sesión activa de `gcloud auth application-default login`.
+
+    Solo requiere GOOGLE_DRIVE_FOLDER_ID. Si no está definido, se omite.
+    """
+    logger = logging.getLogger(__name__)
+
+    if not settings.google_drive_folder_id:
+        logger.debug("GOOGLE_DRIVE_FOLDER_ID no configurado. Se omite upload a Drive.")
+        return
+
+    tpl = settings.google_email_template.strip().lower()
+    output_dir = Path(renderer.output_dir)
+
+    # Mapeo template → nombre de archivo HTML generado
+    html_name_map = {
+        "a": "top4_email_bbva_a.html",
+        "b": "top4_email_bbva_b.html",
+        "c": "top4_email_bbva_c.html",
+    }
+    # El render_html_email() genera top4_email.html; los previews son distintos.
+    # Subimos el archivo canónico del template elegido si existe, o el genérico.
+    html_candidate = output_dir / html_name_map.get(tpl, "top4_email.html")
+    if not html_candidate.exists():
+        html_candidate = output_dir / "top4_email.html"
+
+    json_path = output_dir / "top4_monthly.json"
+
+    paths_to_upload = [p for p in [html_candidate, json_path] if p.exists()]
+    if not paths_to_upload:
+        logger.warning("No se encontraron artefactos para subir a Drive.")
+        return
+
+    try:
+        ids = upload_artifacts(
+            paths=paths_to_upload,
+            folder_id=settings.google_drive_folder_id,
+            sa_key_path=settings.google_sa_key_path,
+        )
+        for name, fid in ids.items():
+            logger.info("Drive ↑ %s (id=%s)", name, fid)
+    except Exception as exc:
+        # No abortar el pipeline si Drive falla
+        logger.error("Error al subir a Google Drive: %s", exc, exc_info=True)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────

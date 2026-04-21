@@ -48,6 +48,20 @@ class Settings(BaseSettings):
     # ── IA opcional ──────────────────────────────────────────────────
     openai_api_key: Optional[str] = None
 
+    # ── Google Drive / Apps Script integration ───────────────────────
+    # Ruta LOCAL al JSON de la Service Account (NUNCA commitear este archivo)
+    google_sa_key_path: Optional[str] = None
+    # ID de la carpeta Drive donde se suben HTML + JSON
+    google_drive_folder_id: Optional[str] = None
+    # ID del Google Sheet con destinatarios (usado solo como referencia/doc)
+    google_sheets_recipients_id: Optional[str] = None
+    # Template a usar para el email Drive: a | b | c  (default: a)
+    google_email_template: str = "a"
+    # URL del Web App de Apps Script (endpoint doPost)
+    google_appscript_webhook_url: Optional[str] = None
+    # Token de autenticacion para el Web App (debe coincidir con Script Properties)
+    google_appscript_token: Optional[str] = None
+
     # ── Fuentes habilitadas ──────────────────────────────────────────
     # Fuentes en español
     enable_welivesecurity: bool = False   # deshabilitado: RSS con contenido mixto
