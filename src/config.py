@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     enable_cybersecnews: bool = False
     enable_cybersecnews_es: bool = True
     enable_hispasec: bool = True
+    enable_revista_ciberseguridad: bool = True
     enable_kaspersky_latam: bool = True
 
 
