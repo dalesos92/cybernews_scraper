@@ -23,10 +23,7 @@ from src.ranking import rank_items
 from src.renderers import Renderer, get_subject
 from src.sender import EmailSender, SlackWebhookSender, TeamsWebhookSender
 from src.sources.html import (
-    HackerNewsHTMLSource,
-    KasperskyHTMLSource,
     KasperskyLatamSource,
-    SecurityWeekHTMLSource,
 )
 from src.sources.rss import RSSSource
 from src.storage import Storage
@@ -51,51 +48,12 @@ def build_sources() -> list[RSSSource]:
     """Construye la lista de fuentes activas según la configuración."""
     sources: list[RSSSource] = []
 
-    if settings.enable_hackernews:
-        sources.append(
-            RSSSource(
-                name="The Hacker News",
-                rss_url="https://feeds.feedburner.com/TheHackersNews",
-                site_url="https://thehackernews.com/",
-                fallback=HackerNewsHTMLSource(),
-            )
-        )
-
-    if settings.enable_securityweek:
-        sources.append(
-            RSSSource(
-                name="SecurityWeek",
-                rss_url="https://feeds.feedburner.com/Securityweek",
-                site_url="https://www.securityweek.com/",
-                fallback=SecurityWeekHTMLSource(),
-            )
-        )
-
-    if settings.enable_kaspersky:
-        sources.append(
-            RSSSource(
-                name="Kaspersky Securelist",
-                rss_url="https://securelist.com/feed/",
-                site_url="https://securelist.com/",
-                fallback=KasperskyHTMLSource(),
-            )
-        )
-
     if settings.enable_welivesecurity:
         sources.append(
             RSSSource(
                 name="WeLiveSecurity ES",
                 rss_url="https://www.welivesecurity.com/es/rss/feed/",
                 site_url="https://www.welivesecurity.com/es/",
-            )
-        )
-
-    if settings.enable_cybersecnews:
-        sources.append(
-            RSSSource(
-                name="CyberSecurity News",
-                rss_url="https://cybersecuritynews.com/news/feed/",
-                site_url="https://cybersecuritynews.com/",
             )
         )
 
@@ -123,6 +81,24 @@ def build_sources() -> list[RSSSource]:
                 name="Revista Ciberseguridad",
                 rss_url="https://www.revistaciberseguridad.com/feed/",
                 site_url="https://www.revistaciberseguridad.com/",
+            )
+        )
+
+    if settings.enable_incibe:
+        sources.append(
+            RSSSource(
+                name="INCIBE-CERT",
+                rss_url="https://www.incibe.es/rss.xml",
+                site_url="https://www.incibe.es/",
+            )
+        )
+
+    if settings.enable_seguinfo:
+        sources.append(
+            RSSSource(
+                name="Segu-Info",
+                rss_url="http://feeds.feedburner.com/NoticiasSeguridadInformatica",
+                site_url="https://blog.segu-info.com.ar/",
             )
         )
 

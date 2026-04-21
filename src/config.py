@@ -49,15 +49,19 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = None
 
     # ── Fuentes habilitadas ──────────────────────────────────────────
-    enable_hackernews: bool = True
-    enable_securityweek: bool = True
-    enable_kaspersky: bool = True
+    # Fuentes en español
     enable_welivesecurity: bool = True
-    enable_cybersecnews: bool = False
     enable_cybersecnews_es: bool = True
     enable_hispasec: bool = True
     enable_revista_ciberseguridad: bool = True
+    enable_incibe: bool = True
+    enable_seguinfo: bool = True
     enable_kaspersky_latam: bool = True
+    # Fuentes en inglés (deshabilitadas)
+    enable_hackernews: bool = False
+    enable_securityweek: bool = False
+    enable_kaspersky: bool = False
+    enable_cybersecnews: bool = False
 
 
 settings = Settings()
