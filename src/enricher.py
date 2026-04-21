@@ -16,6 +16,7 @@ import re
 from typing import Optional
 
 import httpx
+import unicodedata
 from bs4 import BeautifulSoup
 
 from src.config import settings
@@ -208,7 +209,7 @@ def _clean_summary(text: str) -> str:
 # ── Fetch ligero del artículo ─────────────────────────────────────────
 
 
-def _fetch_article_text(url: str, max_chars: int = 3000) -> str:
+def _fetch_article_text(url: str, max_chars: int = 5000) -> str:
     """Descarga el artículo y extrae el texto visible (primeros N chars)."""
     try:
         with httpx.Client(
@@ -370,13 +371,28 @@ def enrich_item(item: NewsItem) -> StructuredInsight:
         # Pie de WordPress / syndication
         "se publicó primero en", "was first published", "read more at",
         "continue reading", "leer artículo completo",
+        # Índices / tablas de contenido (INCIBE-CERT, boletines)
+        "índice", "table of contents", "ir a sección",
     )
+
+    def _looks_like_index(sentence: str) -> bool:
+        """Detecta frases que son solo una lista de títulos concatenados
+        (ej. índice de boletín con muchos nombres de producto/vuln)."""
+        words = sentence.split()
+        if len(words) < 12:
+            return False
+        # Alta proporción de palabras capitalizadas → lista de títulos
+        cap = sum(1 for w in words if w and w[0].isupper() and len(w) > 1)
+        return (cap / len(words)) > 0.50
+
     source_text = full_text or item.summary
     raw_sentences = re.split(r"(?<=[.!?])\s+", source_text.strip())
     good: list[str] = []
     for s in raw_sentences:
         s_clean = s.strip()
-        s_low = s_clean.lower()
+        # Normalizar a NFC para que acentos compuestos (NFD del RSS) coincidan
+        # con los literales del código fuente (NFC). P. ej. Índice en RSS es NFD.
+        s_low = unicodedata.normalize("NFC", s_clean.lower())
         # Saltar si es muy corto, es navegación o tiene demasiadas barras
         if len(s_clean) < 40:
             continue
@@ -386,6 +402,9 @@ def enrich_item(item: NewsItem) -> StructuredInsight:
             continue
         # Descartar frases truncadas (terminan con […] o similar)
         if re.search(r"\[[\u2026\.]{1,3}\]$", s_clean):
+            continue
+        # Descartar listas de títulos concatenados (índices de boletín)
+        if _looks_like_index(s_clean):
             continue
         good.append(s_clean)
         if len(good) == 4:
@@ -399,7 +418,18 @@ def enrich_item(item: NewsItem) -> StructuredInsight:
         if last_punct > 0:
             que_paso = que_paso[: last_punct + 1]
     if not que_paso:
-        que_paso = _clean_summary(item.summary)[:280]
+        # No se encontraron oraciones informativas (p. ej. RSS es solo un índice).
+        # Construir descripción sintética a partir de los metadatos disponibles.
+        synth: list[str] = [item.title]
+        if cves:
+            synth.append("CVEs identificados: " + ", ".join(cves[:4]))
+        if item.keywords_found:
+            synth.append("Tipos de vulnerabilidad: " + ", ".join(item.keywords_found[:3]))
+        synth.append(
+            f"Publicado por {item.source_name} "
+            f"el {item.published_at.strftime('%d/%m/%Y')}."
+        )
+        que_paso = ". ".join(synth)
 
     # ── Afectados ─────────────────────────────────────────────────────
     afectados = _build_afectados(item.title, combined, orgs)
