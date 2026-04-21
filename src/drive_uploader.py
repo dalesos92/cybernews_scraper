@@ -1,10 +1,9 @@
 """Sube artefactos generados a Google Drive.
 
 Autenticación (en orden de prioridad):
-1. Si GOOGLE_SA_KEY_PATH está definido en .env → usa esa clave explícita.
-2. Si no → usa Application Default Credentials (ADC), que hereda la sesión
-   activa de `gcloud auth application-default login` o del entorno Google
-   (Cloud Run, GCE, Colab, etc.). No requiere ningún archivo de clave.
+1. `credentials` explícitas pasadas al llamar la función (ej. desde Colab tras authenticate_user).
+2. Si GOOGLE_SA_KEY_PATH está definido en .env → usa esa clave explícita.
+3. Si no → usa Application Default Credentials (ADC): gcloud auth / Cloud Run / GCE.
 """
 from __future__ import annotations
 
@@ -25,6 +24,7 @@ def upload_artifacts(
     paths: list[Path],
     folder_id: str,
     sa_key_path: str | None = None,
+    credentials=None,
 ) -> dict[str, str]:
     """Sube una lista de archivos a la carpeta Drive indicada.
 
@@ -35,7 +35,9 @@ def upload_artifacts(
         paths:       Lista de Path locales a subir.
         folder_id:   ID de la carpeta Google Drive destino.
         sa_key_path: (Opcional) Ruta al JSON de una Service Account explícita.
-                     Si es None, se usan Application Default Credentials (ADC).
+        credentials: (Opcional) Objeto de credenciales ya construido.
+                     Tiene prioridad sobre sa_key_path y ADC.
+                     Usar en Colab tras `google.colab.auth.authenticate_user()`.
 
     Returns:
         Dict {nombre_archivo: drive_file_id} con los IDs resultantes.
@@ -53,7 +55,7 @@ def upload_artifacts(
             "Ejecuta: pip install google-api-python-client google-auth"
         ) from exc
 
-    creds = _get_credentials(sa_key_path)
+    creds = credentials or _get_credentials(sa_key_path)
     service = build("drive", "v3", credentials=creds, cache_discovery=False)
 
     result: dict[str, str] = {}
