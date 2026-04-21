@@ -173,6 +173,9 @@ def run(
     logger.info("Enriqueciendo top-%d con análisis estructurado...", len(ranked))
     enrich_ranked(ranked)
 
+    # 7b. Traducir títulos y campo "qué pasó" al español
+    _translate_to_es(ranked)
+
     # 8. Renderizar salidas
     renderer = Renderer(output_dir=output_dir or settings.output_dir)
     renderer.render_json(ranked)
@@ -196,6 +199,29 @@ def run(
     logger.info("=" * 60)
     logger.info("Pipeline completado correctamente.")
     return ranked
+
+
+def _translate_to_es(ranked: list[RankedNewsItem]) -> None:
+    """Traduce títulos y resúmenes al español usando Google Translate (sin API key)."""
+    logger = logging.getLogger(__name__)
+    try:
+        from deep_translator import GoogleTranslator
+        translator = GoogleTranslator(source="auto", target="es")
+        for r in ranked:
+            try:
+                r.item.title_es = translator.translate(r.item.title)
+                if r.item.insight and r.item.insight.que_paso:
+                    r.item.insight.que_paso = translator.translate(
+                        r.item.insight.que_paso[:4999]
+                    )
+            except Exception as exc:
+                logger.warning("No se pudo traducir '%s': %s", r.item.title[:50], exc)
+                r.item.title_es = r.item.title  # fallback al inglés original
+        logger.info("Títulos traducidos al español.")
+    except ImportError:
+        logger.warning("deep-translator no instalado. Usando títulos en inglés.")
+        for r in ranked:
+            r.item.title_es = r.item.title
 
 
 # ── Generación de resúmenes en español ───────────────────────────────

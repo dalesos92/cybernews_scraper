@@ -75,6 +75,7 @@ class Renderer:
                 {
                     "rank": r.rank,
                     "title": r.item.title,
+                    "title_es": r.item.title_es or r.item.title,
                     "url": r.item.url,
                     "source": r.item.source_name,
                     "published_at": r.item.published_at.isoformat(),
@@ -120,8 +121,10 @@ class Renderer:
                 if item.keywords_found
                 else "—"
             )
+            title_display = item.title_es or item.title
             lines += [
-                f"\n## {r.rank}. {item.title}",
+                f"\n## {r.rank}. {title_display}",
+                f"_{item.title}_" if item.title_es else "",
                 "",
                 f"| Campo | Valor |",
                 f"|---|---|",

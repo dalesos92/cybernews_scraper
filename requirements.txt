@@ -16,6 +16,9 @@ jinja2>=3.1.4
 # ── Resilience ──────────────────────────────────────────────────────
 tenacity>=8.3.0
 
+# ── Translation (Google Translate, no API key required) ─────────────
+deep-translator>=1.11.4
+
 # ── Testing ─────────────────────────────────────────────────────────
 pytest>=8.2.0
 
