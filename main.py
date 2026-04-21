@@ -25,6 +25,7 @@ from src.sender import EmailSender, SlackWebhookSender, TeamsWebhookSender
 from src.sources.html import (
     HackerNewsHTMLSource,
     KasperskyHTMLSource,
+    KasperskyLatamSource,
     SecurityWeekHTMLSource,
 )
 from src.sources.rss import RSSSource
@@ -97,6 +98,9 @@ def build_sources() -> list[RSSSource]:
                 site_url="https://cybersecuritynews.com/",
             )
         )
+
+    if settings.enable_kaspersky_latam:
+        sources.append(KasperskyLatamSource())
 
     return sources
 
@@ -325,12 +329,12 @@ def main() -> None:
     if not ranked:
         sys.exit(1)
 
-    print(f"\n{'─'*60}")
+    print(f"\n{'-'*60}")
     print(f"  Top {len(ranked)} noticias del mes:")
-    print(f"{'─'*60}")
+    print(f"{'-'*60}")
     for r in ranked:
         print(f"  #{r.rank}  [{r.score:5.1f} pts]  {r.item.title[:68]}")
-    print(f"{'─'*60}\n")
+    print(f"{'-'*60}\n")
 
 
 if __name__ == "__main__":

@@ -212,3 +212,84 @@ def SecurityWeekHTMLSource() -> GenericHTMLSource:
 
 def KasperskyHTMLSource() -> GenericHTMLSource:
     return GenericHTMLSource(_KASPERSKY_CFG)
+
+
+# ── Kaspersky LATAM Press Releases (scraper especializado) ────────────
+
+_MESES_ES = {
+    "enero": 1, "febrero": 2, "marzo": 3, "abril": 4,
+    "mayo": 5, "junio": 6, "julio": 7, "agosto": 8,
+    "septiembre": 9, "octubre": 10, "noviembre": 11, "diciembre": 12,
+}
+
+
+def _parse_fecha_es(text: str) -> datetime:
+    """Parsea fechas en español como '20 de abril de 2026'."""
+    import re
+    m = re.search(r"(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})", text.lower())
+    if m:
+        day, month_str, year = int(m.group(1)), m.group(2), int(m.group(3))
+        month = _MESES_ES.get(month_str)
+        if month:
+            return datetime(year, month, day, tzinfo=timezone.utc)
+    return datetime.now(timezone.utc)
+
+
+class KasperskyLatamSource(BaseSource):
+    """Scraper para latam.kaspersky.com/about/press-releases."""
+
+    name = "Kaspersky LATAM"
+    site_url = "https://latam.kaspersky.com/about/press-releases"
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(Exception),
+        reraise=True,
+    )
+    def _get_html(self) -> str:
+        with httpx.Client(
+            timeout=settings.http_timeout,
+            headers={"User-Agent": settings.http_user_agent},
+            follow_redirects=True,
+        ) as client:
+            resp = client.get(self.site_url)
+            resp.raise_for_status()
+            return resp.text
+
+    def _fetch(self) -> list[NewsItem]:
+        logger.info("[%s] Scraping HTML: %s", self.name, self.site_url)
+        html = self._get_html()
+        soup = BeautifulSoup(html, "lxml")
+
+        items: list[NewsItem] = []
+        # Cada comunicado está en un <article> o bloque con <h3> + enlace
+        for block in soup.select("h3 a[href*='/about/press-releases/']")[:25]:
+            try:
+                title = block.get_text(strip=True)
+                if not title:
+                    continue
+                href = block.get("href", "")
+                url = href if href.startswith("http") else urljoin(self.site_url, href)
+
+                # Fecha: texto anterior al enlace dentro del contenedor padre
+                parent = block.find_parent()
+                raw_text = parent.get_text(" ", strip=True) if parent else ""
+                published_at = _parse_fecha_es(raw_text)
+
+                # Resumen: texto del contenedor sin el título
+                summary = raw_text.replace(title, "").replace("MÁS INFORMACIÓN", "").strip()
+                summary = " ".join(summary.split())[:500]
+
+                items.append(NewsItem(
+                    title=title,
+                    url=url,
+                    source_name=self.name,
+                    published_at=published_at,
+                    summary=summary,
+                ))
+            except Exception as exc:
+                logger.warning("[%s] Error parseando bloque: %s", self.name, exc)
+
+        logger.info("[%s] %d ítems extraídos.", self.name, len(items))
+        return items
