@@ -50,11 +50,11 @@ class Settings(BaseSettings):
 
     # ── Fuentes habilitadas ──────────────────────────────────────────
     # Fuentes en español
-    enable_welivesecurity: bool = True
+    enable_welivesecurity: bool = False   # deshabilitado: RSS con contenido mixto
     enable_cybersecnews_es: bool = True
     enable_hispasec: bool = True
     enable_revista_ciberseguridad: bool = True
-    enable_incibe: bool = True
+    enable_incibe: bool = False           # deshabilitado: RSS devuelve solo índice
     enable_seguinfo: bool = True
     enable_kaspersky_latam: bool = True
     # Fuentes en inglés (deshabilitadas)
