@@ -1,0 +1,1 @@
+"""CyberNews Scraper — paquete principal."""
