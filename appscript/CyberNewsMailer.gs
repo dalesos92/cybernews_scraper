@@ -92,6 +92,15 @@ function onOpen() {
  *   { "status": 403, "message": "Unauthorized" }
  *   { "status": 500, "message": "Error: ..." }
  */
+/**
+ * Endpoint GET. Responde con un estado de salud básico.
+ * Necesario para que el despliegue del Web App no falle al verificar la URL.
+ * No expone información sensible ni ejecuta ninguna acción.
+ */
+function doGet(e) {
+  return _jsonResponse(200, "CyberNews Mailer — Web App activo. Usa POST para disparar el envio.");
+}
+
 function doPost(e) {
   // 1. Parsear cuerpo JSON
   var receivedToken = "";
