@@ -183,6 +183,28 @@ _DEFAULT_MITIGATION = (
 )
 
 
+# ── Limpieza de resúmenes RSS ─────────────────────────────────────────
+
+_RE_HTML_TAGS = re.compile(r"<[^>]+>")
+_RE_WORDPRESS_FOOTER = re.compile(
+    r"La entrada .+? se public[oó] primero en .+?\.",
+    re.IGNORECASE | re.DOTALL,
+)
+_RE_TRUNCATED_END = re.compile(r"\s*\[[\u2026\.]{1,3}\]\s*$")
+
+
+def _clean_summary(text: str) -> str:
+    """Limpia un resumen RSS: elimina HTML, pie de WordPress y texto truncado."""
+    t = _RE_HTML_TAGS.sub("", text)
+    t = _RE_WORDPRESS_FOOTER.sub("", t)
+    t = _RE_TRUNCATED_END.sub("", t)
+    # Eliminar última oración incompleta (sin punto final)
+    sentences = re.split(r"(?<=[.!?])\s+", t.strip())
+    if len(sentences) > 1 and not sentences[-1].rstrip().endswith((".", "!", "?")):
+        sentences = sentences[:-1]
+    return " ".join(sentences).strip()
+
+
 # ── Fetch ligero del artículo ─────────────────────────────────────────
 
 
@@ -197,10 +219,24 @@ def _fetch_article_text(url: str, max_chars: int = 3000) -> str:
             resp = client.get(url)
             resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "lxml")
-        # Eliminar scripts, estilos y nav
-        for tag in soup(["script", "style", "nav", "header", "footer", "aside"]):
+        # Eliminar scripts, estilos, navegación y elementos cromáticos
+        for tag in soup(["script", "style", "nav", "header", "footer",
+                          "aside", "noscript", "form", "button", "iframe"]):
             tag.decompose()
+        # Eliminar por atributos: menús, migas de pan, sidebars, skip-links
+        _JUNK_PATTERNS = (
+            "nav", "menu", "breadcrumb", "sidebar", "skip",
+            "related", "share", "social", "cookie", "banner",
+            "advertisement", "promo", "tags", "comments",
+        )
+        for attr in ("class", "id", "role"):
+            for elem in soup.find_all(attrs={attr: True}):
+                val = " ".join(elem.get(attr, [])) if isinstance(elem.get(attr), list) else str(elem.get(attr, ""))
+                if any(p in val.lower() for p in _JUNK_PATTERNS):
+                    elem.decompose()
         text = soup.get_text(" ", strip=True)
+        # Colapsar espacios múltiples
+        text = re.sub(r"[ \t]{2,}", " ", text)
         return text[:max_chars]
     except Exception as exc:
         logger.debug("Fetch artículo fallido (%s): %s", url, exc)
@@ -325,11 +361,45 @@ def enrich_item(item: NewsItem) -> StructuredInsight:
     cifras = "; ".join(cifras_parts) if cifras_parts else "Sin cifras específicas detectadas"
 
     # ── Qué pasó ──────────────────────────────────────────────────────
-    # Usamos las primeras 2 oraciones del artículo o el resumen RSS
-    sentences = re.split(r"(?<=[.!?])\s+", (full_text or item.summary).strip())
-    que_paso = " ".join(sentences[:5]).strip()[:800]
+    # Tomar hasta 4 oraciones informativas del artículo, descartando
+    # fragmentos de navegación, breadcrumbs y frases muy cortas.
+    _NAV_FRAGMENTS = (
+        "saltar al", "usted está aquí", "inicio /", "ir al contenido",
+        "skip to", "you are here", "compartir", "ver más", "leer más",
+        "suscrib", "newsletter", "registr", "inicio",
+        # Pie de WordPress / syndication
+        "se publicó primero en", "was first published", "read more at",
+        "continue reading", "leer artículo completo",
+    )
+    source_text = full_text or item.summary
+    raw_sentences = re.split(r"(?<=[.!?])\s+", source_text.strip())
+    good: list[str] = []
+    for s in raw_sentences:
+        s_clean = s.strip()
+        s_low = s_clean.lower()
+        # Saltar si es muy corto, es navegación o tiene demasiadas barras
+        if len(s_clean) < 40:
+            continue
+        if any(frag in s_low for frag in _NAV_FRAGMENTS):
+            continue
+        if s_clean.count("/") > 3:
+            continue
+        # Descartar frases truncadas (terminan con […] o similar)
+        if re.search(r"\[[\u2026\.]{1,3}\]$", s_clean):
+            continue
+        good.append(s_clean)
+        if len(good) == 4:
+            break
+    que_paso = " ".join(good).strip()
+    # Si termina a mitad de oración (por corte de 3000 chars), truncar en el
+    # último signo de puntuación completo antes del límite de 800 chars.
+    que_paso = que_paso[:800]
+    if que_paso and que_paso[-1] not in ".!?":
+        last_punct = max(que_paso.rfind("."), que_paso.rfind("!"), que_paso.rfind("?"))
+        if last_punct > 0:
+            que_paso = que_paso[: last_punct + 1]
     if not que_paso:
-        que_paso = item.summary[:280].strip()
+        que_paso = _clean_summary(item.summary)[:280]
 
     # ── Afectados ─────────────────────────────────────────────────────
     afectados = _build_afectados(item.title, combined, orgs)

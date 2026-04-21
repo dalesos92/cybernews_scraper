@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from src.config import settings
 from src.dedup import deduplicate, filter_already_sent
 from src.enricher import enrich_ranked
+from src.enricher import _clean_summary
 from src.models import NewsItem, RankedNewsItem
 from src.ranking import rank_items
 from src.renderers import Renderer, get_subject
@@ -242,7 +243,7 @@ def _generate_summaries_es(ranked: list[RankedNewsItem]) -> None:
 def _template_summary(item: NewsItem) -> str:
     date_str = item.published_at.strftime("%d/%m/%Y")
     kw = ", ".join(item.keywords_found[:3]) if item.keywords_found else "ciberseguridad"
-    raw = item.summary.strip()
+    raw = _clean_summary(item.summary).strip()
     tail = "." if raw and not raw.endswith((".", "!", "?")) else ""
     return (
         f"**{item.source_name}** ({date_str}): {item.title}. "
