@@ -173,6 +173,14 @@ def run(
             r.item.source_name,
         )
 
+    # Calcular noticias que no entraron en el top-N (ya tienen score asignado)
+    top_hashes = {r.item.url_hash for r in ranked}
+    remaining = sorted(
+        [i for i in fresh if i.url_hash not in top_hashes],
+        key=lambda i: i.score,
+        reverse=True,
+    )
+
     # 6. Generar resúmenes en español
     _generate_summaries_es(ranked)
 
@@ -184,6 +192,8 @@ def run(
     renderer = Renderer(output_dir=output_dir or settings.output_dir)
     renderer.render_json(ranked)
     renderer.render_markdown(ranked)
+    renderer.render_remaining_md(remaining)
+    renderer.render_remaining_html(remaining)
     html_path = renderer.render_html_email(ranked)
 
     if dry_run:

@@ -155,6 +155,152 @@ class Renderer:
         logger.info("Markdown generado: %s", path)
         return path
 
+    def render_remaining_md(self, remaining: list["NewsItem"]) -> Path:
+        """Genera remaining_news.md con todas las noticias fuera del top-N."""
+        from src.models import NewsItem  # import local para evitar ciclo
+
+        now = datetime.now(timezone.utc)
+        lines: list[str] = [
+            "# Resto de noticias recopiladas\n",
+            f"_Generado el {now.strftime('%d/%m/%Y %H:%M')} UTC — "
+            f"{len(remaining)} noticias fuera del Top {settings.top_n}_\n",
+        ]
+        for i, item in enumerate(remaining, start=1):
+            date_str = item.published_at.strftime("%d/%m/%Y")
+            kw_str = (
+                " · ".join(f"`{k}`" for k in item.keywords_found[:4])
+                if item.keywords_found
+                else "—"
+            )
+            lines += [
+                f"\n### {i}. {item.title}",
+                "",
+                f"| Campo | Valor |",
+                f"|---|---|",
+                f"| Fuente | {item.source_name} |",
+                f"| Fecha | {date_str} |",
+                f"| Score | {item.score:.1f} |",
+                f"| Keywords | {kw_str} |",
+                f"| URL | <{item.url}> |",
+                "",
+                "---",
+            ]
+
+        path = self.output_dir / "remaining_news.md"
+        path.write_text("\n".join(lines), encoding="utf-8")
+        logger.info("Remaining Markdown generado: %s", path)
+        return path
+
+    def render_remaining_html(self, remaining: list) -> Path:
+        """Genera remaining_news.html con todas las noticias fuera del top-N."""
+        now = datetime.now(timezone.utc)
+        date_str = now.strftime("%d/%m/%Y %H:%M UTC")
+
+        rows_html = ""
+        for i, item in enumerate(remaining, start=1):
+            pub = item.published_at.strftime("%d/%m/%Y")
+            kw_badges = "".join(
+                f'<span style="display:inline-block;background:#e8f0fe;color:#1a56db;'
+                f'padding:2px 7px;border-radius:10px;font-size:11px;margin:0 3px 3px 0;">'
+                f'{kw}</span>'
+                for kw in item.keywords_found[:4]
+            ) or '<span style="color:#aaa;">—</span>'
+            rows_html += f"""
+            <tr style="border-bottom:1px solid #eee;">
+              <td style="padding:10px 8px;color:#888;font-size:13px;
+                         text-align:center;vertical-align:top;">{i}</td>
+              <td style="padding:10px 12px;vertical-align:top;">
+                <a href="{item.url}" target="_blank"
+                   style="color:#003B73;font-weight:bold;font-size:14px;
+                          text-decoration:none;line-height:1.4;">{item.title}</a>
+                <div style="margin-top:5px;">{kw_badges}</div>
+              </td>
+              <td style="padding:10px 8px;font-size:13px;color:#555;
+                         vertical-align:top;white-space:nowrap;">{item.source_name}</td>
+              <td style="padding:10px 8px;font-size:13px;color:#555;
+                         vertical-align:top;white-space:nowrap;">{pub}</td>
+              <td style="padding:10px 8px;font-size:13px;color:#777;
+                         text-align:right;vertical-align:top;
+                         white-space:nowrap;">{item.score:.1f}</td>
+            </tr>"""
+
+        html = f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resto de noticias — CyberNews Scraper</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f4;
+             font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+         style="background:#f4f4f4;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="860" cellpadding="0" cellspacing="0"
+               style="max-width:860px;background:#fff;border-radius:8px;
+                      border:1px solid #dde3ec;overflow:hidden;">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:#003B73;padding:24px 36px;">
+              <h1 style="color:#fff;margin:0;font-size:19px;font-weight:bold;">
+                📋 Resto de noticias recopiladas
+              </h1>
+              <p style="color:#9ec3e6;margin:6px 0 0;font-size:13px;">
+                {date_str} &nbsp;·&nbsp; {len(remaining)} noticias fuera del
+                Top&nbsp;{settings.top_n} &nbsp;·&nbsp;
+                <a href="top4_email.html"
+                   style="color:#9ec3e6;text-decoration:underline;">
+                  ← Volver al Top {settings.top_n}
+                </a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Tabla de noticias -->
+          <tr>
+            <td style="padding:24px 36px;">
+              <table width="100%" cellpadding="0" cellspacing="0"
+                     style="border-collapse:collapse;">
+                <thead>
+                  <tr style="background:#003B73;color:#fff;">
+                    <th style="padding:9px 8px;font-size:12px;width:36px;">#</th>
+                    <th style="padding:9px 12px;font-size:12px;text-align:left;">Noticia</th>
+                    <th style="padding:9px 8px;font-size:12px;text-align:left;">Fuente</th>
+                    <th style="padding:9px 8px;font-size:12px;text-align:left;">Fecha</th>
+                    <th style="padding:9px 8px;font-size:12px;text-align:right;">Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows_html}
+                </tbody>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:16px 36px;border-top:1px solid #e4e9f0;
+                       background:#f9fafb;text-align:center;">
+              <p style="color:#999;font-size:12px;margin:0;">
+                Generado automáticamente por <strong>CyberNews Scraper</strong>.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+        path = self.output_dir / "remaining_news.html"
+        path.write_text(html, encoding="utf-8")
+        logger.info("Remaining HTML generado: %s", path)
+        return path
+
     def render_html_email(self, ranked: list[RankedNewsItem]) -> Path:
         """Genera top4_email.html usando plantilla Jinja2."""
         now = datetime.now(timezone.utc)
