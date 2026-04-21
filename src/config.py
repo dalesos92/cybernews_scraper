@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     enable_kaspersky: bool = True
     enable_welivesecurity: bool = True
     enable_cybersecnews: bool = False
+    enable_cybersecnews_es: bool = True
     enable_kaspersky_latam: bool = True
 
 

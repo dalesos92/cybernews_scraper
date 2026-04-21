@@ -99,6 +99,15 @@ def build_sources() -> list[RSSSource]:
             )
         )
 
+    if settings.enable_cybersecnews_es:
+        sources.append(
+            RSSSource(
+                name="CyberSecurity News ES",
+                rss_url="https://cybersecuritynews.es/feed/",
+                site_url="https://cybersecuritynews.es/",
+            )
+        )
+
     if settings.enable_kaspersky_latam:
         sources.append(KasperskyLatamSource())
 
