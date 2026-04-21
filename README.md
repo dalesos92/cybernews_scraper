@@ -1,5 +1,7 @@
 # CyberNews Scraper
 
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/dalesos92/cybernews_scraper/blob/main/CyberNews_Scraper.ipynb)
+
 Sistema de producción en Python para recopilar, puntuar y distribuir mensualmente las **4 noticias más relevantes de ciberseguridad** a equipos de desarrollo, AppSec y DevOps.
 
 ---
