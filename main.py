@@ -108,6 +108,15 @@ def build_sources() -> list[RSSSource]:
             )
         )
 
+    if settings.enable_hispasec:
+        sources.append(
+            RSSSource(
+                name="Hispasec Una-al-Día",
+                rss_url="https://unaaldia.hispasec.com/feed/",
+                site_url="https://unaaldia.hispasec.com/",
+            )
+        )
+
     if settings.enable_kaspersky_latam:
         sources.append(KasperskyLatamSource())
 
