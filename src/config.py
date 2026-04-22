@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     # ID del Google Sheet con destinatarios (usado solo como referencia/doc)
     google_sheets_recipients_id: Optional[str] = None
     # Template a usar para el email Drive: a | b | c  (default: a)
-    google_email_template: str = "a"
+    google_email_template: str = "c"
     # URL del Web App de Apps Script (endpoint doPost)
     google_appscript_webhook_url: Optional[str] = None
     # Token de autenticacion para el Web App (debe coincidir con Script Properties)
