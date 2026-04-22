@@ -302,10 +302,24 @@ class Renderer:
         return path
 
     def render_html_email(self, ranked: list[RankedNewsItem]) -> Path:
-        """Genera top4_email.html usando plantilla Jinja2."""
+        """Genera top4_email.html usando plantilla Jinja2.
+
+        Selecciona la plantilla según ``settings.google_email_template``:
+        - "c" → email_bbva_c.html.j2
+        - "b" → email_bbva_b.html.j2
+        - "a" → email_bbva_a.html.j2
+        - cualquier otro valor → email.html.j2 (genérico)
+        """
         now = datetime.now(timezone.utc)
+        tpl_key = settings.google_email_template.strip().lower()
+        tpl_map = {
+            "a": "email_bbva_a.html.j2",
+            "b": "email_bbva_b.html.j2",
+            "c": "email_bbva_c.html.j2",
+        }
+        tpl_name = tpl_map.get(tpl_key, "email.html.j2")
         try:
-            template = self._jinja_env.get_template("email.html.j2")
+            template = self._jinja_env.get_template(tpl_name)
             html = template.render(
                 subject=get_subject(now),
                 items=ranked,
@@ -314,14 +328,15 @@ class Renderer:
             )
         except Exception as exc:
             logger.warning(
-                "Plantilla Jinja2 no disponible (%s). Usando fallback inline.",
+                "Plantilla Jinja2 '%s' no disponible (%s). Usando fallback inline.",
+                tpl_name,
                 exc,
             )
             html = self._inline_html(ranked, now)
 
         path = self.output_dir / "top4_email.html"
         path.write_text(html, encoding="utf-8")
-        logger.info("HTML email generado: %s", path)
+        logger.info("HTML email generado con plantilla '%s': %s", tpl_name, path)
         return path
 
     # ── Fallback HTML inline ──────────────────────────────────────────

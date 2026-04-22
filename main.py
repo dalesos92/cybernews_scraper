@@ -341,21 +341,10 @@ def _upload_to_drive(renderer: "Renderer") -> None:
         logger.debug("GOOGLE_DRIVE_FOLDER_ID no configurado. Se omite upload a Drive.")
         return
 
-    tpl = settings.google_email_template.strip().lower()
     output_dir = Path(renderer.output_dir)
 
-    # Mapeo template → nombre de archivo HTML generado
-    html_name_map = {
-        "a": "top4_email_bbva_a.html",
-        "b": "top4_email_bbva_b.html",
-        "c": "top4_email_bbva_c.html",
-    }
-    # El render_html_email() genera top4_email.html; los previews son distintos.
-    # Subimos el archivo canónico del template elegido si existe, o el genérico.
-    html_candidate = output_dir / html_name_map.get(tpl, "top4_email.html")
-    if not html_candidate.exists():
-        html_candidate = output_dir / "top4_email.html"
-
+    # render_html_email() siempre genera top4_email.html (con la plantilla elegida)
+    html_candidate = output_dir / "top4_email.html"
     json_path = output_dir / "top4_monthly.json"
 
     paths_to_upload = [p for p in [html_candidate, json_path] if p.exists()]
