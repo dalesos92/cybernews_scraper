@@ -303,10 +303,26 @@ def _trigger_appscript_send() -> None:
     payload = {"token": settings.google_appscript_token or ""}
     try:
         import httpx
+
+        # Obtener Bearer token via ADC para Web Apps con acceso "Solo dominio"
+        headers: dict = {}
+        try:
+            import google.auth
+            from google.auth.transport.requests import Request as _GoogleRequest
+
+            _creds, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/drive"]
+            )
+            _creds.refresh(_GoogleRequest())
+            headers = {"Authorization": f"Bearer {_creds.token}"}
+        except Exception as _auth_exc:
+            logger.debug("No se pudo obtener Bearer token ADC: %s", _auth_exc)
+
         # Apps Script redirige POST con 302; seguimos manualmente para conservar POST
         r0 = httpx.post(
             settings.google_appscript_webhook_url,
             json=payload,
+            headers=headers,
             timeout=30,
             follow_redirects=False,
         )
@@ -314,6 +330,7 @@ def _trigger_appscript_send() -> None:
             resp = httpx.post(
                 r0.headers["location"],
                 json=payload,
+                headers=headers,
                 timeout=30,
                 follow_redirects=True,
             )
@@ -322,8 +339,7 @@ def _trigger_appscript_send() -> None:
         if resp.status_code == 401:
             logger.error(
                 "Apps Script Web App devolvió 401. "
-                "Verifica que el despliegue tenga acceso 'Cualquier persona' (no 'Cualquier usuario de Google') "
-                "y que la URL termine en /exec (no /dev)."
+                "Verifica que la cuenta tiene acceso al dominio y que la URL termina en /exec."
             )
             return
         data = resp.json()
