@@ -108,11 +108,23 @@ function doGet(e) {
     var files  = folder.getFilesByName(CONFIG.JSON_FILENAME);
 
     if (!files.hasNext()) {
+      var folderId = CONFIG.DRIVE_FOLDER_ID;
+      var folderUrl = 'https://drive.google.com/drive/folders/' + folderId;
       return HtmlService.createHtmlOutput(
         '<html><body style="font-family:Arial,sans-serif;padding:40px;color:#1a1a2e;">' +
         '<h2 style="color:#001490;">CyberNews BBVA</h2>' +
-        '<p>El archivo de datos aún no está disponible.</p>' +
-        '<p>Ejecuta el pipeline para generar los archivos.</p></body></html>'
+        '<p style="margin-bottom:8px;">El archivo <strong>' + CONFIG.JSON_FILENAME + '</strong> ' +
+        'no se encontró en la carpeta Drive configurada.</p>' +
+        '<p style="margin-bottom:16px;font-size:13px;color:#555;">' +
+        'Carpeta buscada: <a href="' + folderUrl + '" target="_blank" ' +
+        'style="color:#001490;">' + folderId + '</a></p>' +
+        '<p style="font-size:13px;color:#555;">Posibles causas:</p>' +
+        '<ul style="font-size:13px;color:#555;line-height:1.8;">' +
+        '<li>El <strong>Paso 7</strong> del notebook no se ejecutó (los archivos no se subieron a Drive).</li>' +
+        '<li>El <strong>DRIVE_FOLDER_ID</strong> en Apps Script no coincide con el de Colab Secrets. ' +
+        'Verifica que ambos apuntan a la misma carpeta.</li>' +
+        '</ul>' +
+        '</body></html>'
       ).setTitle("CyberNews – Noticias adicionales");
     }
 
