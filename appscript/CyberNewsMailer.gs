@@ -161,6 +161,7 @@ function sendCyberNewsMail() {
       from:     CONFIG.SENDER_ALIAS,
       name:     CONFIG.SENDER_NAME,
       htmlBody: htmlBody,
+      charset:  "UTF-8",
       noReply:  false
     });
     Logger.log("Enviado a: " + to);
@@ -328,6 +329,7 @@ function testSendFirst() {
     from:     CONFIG.SENDER_ALIAS,
     name:     CONFIG.SENDER_NAME,
     htmlBody: htmlBody,
+    charset:  "UTF-8",
     noReply:  false
   });
 
