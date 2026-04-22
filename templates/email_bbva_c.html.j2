@@ -305,7 +305,8 @@
           <tr>
             <td style="padding:8px 36px 24px;text-align:center;">
               <div style="height:1px;background:#D0DCE8;margin-bottom:18px;"></div>
-              <a href="remaining_news.html"
+              <a href="{{ remaining_url or '#' }}"
+                 {% if not remaining_url %}onclick="return false;" {% endif %}
                  style="display:inline-block;background:#F0F5FC;
                         color:#001490;border:1.5px solid #001490;
                         padding:9px 28px;border-radius:4px;

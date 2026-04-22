@@ -344,10 +344,11 @@ def _upload_to_drive(renderer: "Renderer") -> None:
     output_dir = Path(renderer.output_dir)
 
     # render_html_email() siempre genera top4_email.html (con la plantilla elegida)
-    html_candidate = output_dir / "top4_email.html"
-    json_path = output_dir / "top4_monthly.json"
+    html_candidate     = output_dir / "top4_email.html"
+    remaining_candidate = output_dir / "remaining_news.html"
+    json_path          = output_dir / "top4_monthly.json"
 
-    paths_to_upload = [p for p in [html_candidate, json_path] if p.exists()]
+    paths_to_upload = [p for p in [html_candidate, remaining_candidate, json_path] if p.exists()]
     if not paths_to_upload:
         logger.warning("No se encontraron artefactos para subir a Drive.")
         return

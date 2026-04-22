@@ -318,6 +318,11 @@ class Renderer:
             "c": "email_bbva_c.html.j2",
         }
         tpl_name = tpl_map.get(tpl_key, "email.html.j2")
+        # URL pública de noticias adicionales (Web App de Apps Script + ?page=remaining)
+        remaining_url = ""
+        webhook = getattr(settings, "google_appscript_webhook_url", None)
+        if webhook:
+            remaining_url = webhook.rstrip("&?") + "?page=remaining"
         try:
             template = self._jinja_env.get_template(tpl_name)
             html = template.render(
@@ -325,6 +330,7 @@ class Renderer:
                 items=ranked,
                 generated_at=now.strftime("%d/%m/%Y %H:%M UTC"),
                 top_n=settings.top_n,
+                remaining_url=remaining_url,
             )
         except Exception as exc:
             logger.warning(

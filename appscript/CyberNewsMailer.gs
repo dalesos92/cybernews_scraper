@@ -46,8 +46,9 @@ var CONFIG = {
   DRIVE_FOLDER_ID: "REEMPLAZAR_CON_ID_DE_CARPETA_DRIVE",
 
   // Nombres de archivo tal como los sube Python
-  HTML_FILENAME: "top4_email.html",
-  JSON_FILENAME: "top4_monthly.json",
+  HTML_FILENAME:      "top4_email.html",
+  JSON_FILENAME:      "top4_monthly.json",
+  REMAINING_FILENAME: "remaining_news.html",
 
   // Alias Gmail configurado en: Mi Cuenta Google → Configuración → Cuentas e importación → "Enviar como"
   SENDER_ALIAS: "ciberseguridad@bbva.com",
@@ -98,6 +99,27 @@ function onOpen() {
  * No expone información sensible ni ejecuta ninguna acción.
  */
 function doGet(e) {
+  var page = (e && e.parameter && e.parameter.page) ? e.parameter.page : "";
+
+  // Servir página de noticias adicionales
+  if (page === "remaining") {
+    var folder = DriveApp.getFolderById(CONFIG.DRIVE_FOLDER_ID);
+    var files  = folder.getFilesByName(CONFIG.REMAINING_FILENAME);
+    if (!files.hasNext()) {
+      return HtmlService.createHtmlOutput(
+        '<html><body style="font-family:Arial,sans-serif;padding:40px;color:#1a1a2e;">' +
+        '<h2 style="color:#001490;">CyberNews BBVA</h2>' +
+        '<p>Las noticias adicionales no est\u00e1n disponibles todav\u00eda.</p>' +
+        '<p>Ejecuta el pipeline para generar el archivo.</p></body></html>'
+      ).setTitle("CyberNews \u2013 Noticias adicionales");
+    }
+    var html = files.next().getBlob().getDataAsString("utf-8");
+    return HtmlService.createHtmlOutput(html)
+      .setTitle("CyberNews \u2013 Noticias adicionales")
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
+  // Health check por defecto
   return _jsonResponse(200, "CyberNews Mailer — Web App activo. Usa POST para disparar el envio.");
 }
 
