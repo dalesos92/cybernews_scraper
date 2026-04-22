@@ -111,7 +111,13 @@ def _upsert_file(service, path: Path, mime: str, folder_id: str) -> str:
     )
     res = (
         service.files()
-        .list(q=query, fields="files(id,name)", spaces="drive")
+        .list(
+            q=query,
+            fields="files(id,name)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+            corpora="allDrives",
+        )
         .execute()
     )
     existing = res.get("files", [])
@@ -122,12 +128,13 @@ def _upsert_file(service, path: Path, mime: str, folder_id: str) -> str:
         service.files().update(
             fileId=file_id,
             media_body=media,
+            supportsAllDrives=True,
         ).execute()
     else:
         meta = {"name": path.name, "parents": [folder_id]}
         uploaded = (
             service.files()
-            .create(body=meta, media_body=media, fields="id")
+            .create(body=meta, media_body=media, fields="id", supportsAllDrives=True)
             .execute()
         )
         file_id = uploaded["id"]

@@ -104,8 +104,21 @@ function doGet(e) {
   // ── Página de noticias adicionales ──────────────────────────────────────
   // Lee remaining_items del JSON generado por Python y renderiza HTML.
   if (page === "remaining") {
-    var folder = DriveApp.getFolderById(CONFIG.DRIVE_FOLDER_ID);
-    var files  = folder.getFilesByName(CONFIG.JSON_FILENAME);
+    // ── Buscar el JSON en Drive ──────────────────────────────────────────
+    // Intento 1: búsqueda dentro de la carpeta configurada.
+    var files;
+    try {
+      var folder = DriveApp.getFolderById(CONFIG.DRIVE_FOLDER_ID);
+      files = folder.getFilesByName(CONFIG.JSON_FILENAME);
+    } catch(err) {
+      files = { hasNext: function() { return false; } };
+    }
+
+    // Intento 2: si la carpeta es una Shared Drive o el resultado está vacío,
+    // buscar globalmente en todos los archivos accesibles.
+    if (!files.hasNext()) {
+      files = DriveApp.getFilesByName(CONFIG.JSON_FILENAME);
+    }
 
     if (!files.hasNext()) {
       var folderId = CONFIG.DRIVE_FOLDER_ID;
