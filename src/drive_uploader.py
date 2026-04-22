@@ -10,6 +10,13 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+try:
+    from googleapiclient.discovery import build as _gapi_build
+    from googleapiclient.http import MediaFileUpload
+except ImportError:  # se eleva con mensaje claro en upload_artifacts
+    _gapi_build = None  # type: ignore[assignment]
+    MediaFileUpload = None  # type: ignore[assignment,misc]
+
 logger = logging.getLogger(__name__)
 
 # MIME types por extensión de archivo
@@ -46,17 +53,14 @@ def upload_artifacts(
         ImportError:  Si google-api-python-client no está instalado.
         Exception:    Cualquier error de la API de Drive o de autenticación.
     """
-    try:
-        from googleapiclient.discovery import build
-        from googleapiclient.http import MediaFileUpload
-    except ImportError as exc:
+    if _gapi_build is None:
         raise ImportError(
             "Dependencias de Google no instaladas. "
             "Ejecuta: pip install google-api-python-client google-auth"
-        ) from exc
+        )
 
     creds = credentials or _get_credentials(sa_key_path)
-    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+    service = _gapi_build("drive", "v3", credentials=creds, cache_discovery=False)
 
     result: dict[str, str] = {}
     for path in paths:
