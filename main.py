@@ -318,24 +318,14 @@ def _trigger_appscript_send() -> None:
         except Exception as _auth_exc:
             logger.debug("No se pudo obtener Bearer token ADC: %s", _auth_exc)
 
-        # Apps Script redirige POST con 302; seguimos manualmente para conservar POST
-        r0 = httpx.post(
+        # Apps Script 302 → httpx convierte POST a GET automáticamente (correcto)
+        resp = httpx.post(
             settings.google_appscript_webhook_url,
             json=payload,
             headers=headers,
             timeout=30,
-            follow_redirects=False,
+            follow_redirects=True,
         )
-        if r0.status_code in (301, 302, 303, 307, 308) and "location" in r0.headers:
-            resp = httpx.post(
-                r0.headers["location"],
-                json=payload,
-                headers=headers,
-                timeout=30,
-                follow_redirects=True,
-            )
-        else:
-            resp = r0
         if resp.status_code == 401:
             logger.error(
                 "Apps Script Web App devolvió 401. "
