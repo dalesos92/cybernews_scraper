@@ -101,25 +101,89 @@ function onOpen() {
 function doGet(e) {
   var page = (e && e.parameter && e.parameter.page) ? e.parameter.page : "";
 
-  // Servir página de noticias adicionales
+  // ── Página de noticias adicionales ──────────────────────────────────────
+  // Lee remaining_items del JSON generado por Python y renderiza HTML.
   if (page === "remaining") {
     var folder = DriveApp.getFolderById(CONFIG.DRIVE_FOLDER_ID);
-    var files  = folder.getFilesByName(CONFIG.REMAINING_FILENAME);
+    var files  = folder.getFilesByName(CONFIG.JSON_FILENAME);
+
     if (!files.hasNext()) {
       return HtmlService.createHtmlOutput(
         '<html><body style="font-family:Arial,sans-serif;padding:40px;color:#1a1a2e;">' +
         '<h2 style="color:#001490;">CyberNews BBVA</h2>' +
-        '<p>Las noticias adicionales no est\u00e1n disponibles todav\u00eda.</p>' +
-        '<p>Ejecuta el pipeline para generar el archivo.</p></body></html>'
-      ).setTitle("CyberNews \u2013 Noticias adicionales");
+        '<p>El archivo de datos aún no está disponible.</p>' +
+        '<p>Ejecuta el pipeline para generar los archivos.</p></body></html>'
+      ).setTitle("CyberNews – Noticias adicionales");
     }
-    var html = files.next().getBlob().getDataAsString("utf-8");
+
+    var json    = JSON.parse(files.next().getBlob().getDataAsString("utf-8"));
+    var items   = json.remaining_items || [];
+    var subject = json.subject || "Noticias de ciberseguridad";
+    var genAt   = json.generated_at ? json.generated_at.substring(0, 10) : "";
+
+    // ── Construir tarjetas HTML ──────────────────────────────────────────
+    var cards = "";
+    if (items.length === 0) {
+      cards = '<p style="color:#666;text-align:center;padding:40px 0;">No hay noticias adicionales en este período.</p>';
+    } else {
+      for (var i = 0; i < items.length; i++) {
+        var it   = items[i];
+        var kws  = (it.keywords_found || []).slice(0, 4).map(function(k) {
+          return '<span style="background:#E8F0FE;color:#001490;padding:2px 8px;' +
+                 'border-radius:10px;font-size:11px;margin-right:4px;">' + k + '</span>';
+        }).join("");
+        var date = it.published_at ? it.published_at.substring(0, 10) : "";
+        cards += '<div style="background:#fff;border:1px solid #D0DCE8;border-radius:6px;' +
+                 'padding:16px 20px;margin-bottom:12px;">' +
+                 '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">' +
+                 '<a href="' + it.url + '" target="_blank" ' +
+                 'style="color:#001490;font-weight:bold;font-size:14px;text-decoration:none;line-height:1.4;">' +
+                 it.title + '</a>' +
+                 '<span style="background:#F0F5FC;color:#001490;border:1px solid #001490;' +
+                 'padding:3px 10px;border-radius:3px;font-size:11px;white-space:nowrap;font-weight:bold;">' +
+                 (it.score || 0).toFixed(1) + ' pts</span></div>' +
+                 '<div style="margin-top:8px;font-size:12px;color:#666;">' +
+                 '<strong>' + (it.source || "") + '</strong>' +
+                 (date ? ' · ' + date : '') + '</div>' +
+                 (kws ? '<div style="margin-top:6px;">' + kws + '</div>' : '') +
+                 '</div>';
+      }
+    }
+
+    var html =
+      '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>CyberNews – Noticias adicionales</title></head>' +
+      '<body style="margin:0;padding:0;background:#EEF3F9;font-family:Arial,sans-serif;">' +
+      '<div style="max-width:720px;margin:0 auto;padding:28px 16px;">' +
+
+      // Header
+      '<div style="background:#001490;border-radius:8px 8px 0 0;padding:20px 28px;">' +
+      '<div style="color:#84C8FC;font-size:11px;font-weight:bold;letter-spacing:1px;' +
+      'text-transform:uppercase;margin-bottom:4px;">BBVA Ciberseguridad</div>' +
+      '<h1 style="color:#fff;margin:0;font-size:20px;">Más noticias recopiladas</h1>' +
+      '<p style="color:#84C8FC;margin:4px 0 0;font-size:13px;">' + subject +
+      (genAt ? ' · ' + genAt : '') + '</p></div>' +
+
+      // Contador
+      '<div style="background:#fff;border-left:1px solid #D0DCE8;border-right:1px solid #D0DCE8;' +
+      'padding:12px 20px;font-size:13px;color:#666;">' +
+      '<strong style="color:#001490;">' + items.length + '</strong> noticias adicionales</div>' +
+
+      // Lista
+      '<div style="padding:16px 0;">' + cards + '</div>' +
+
+      // Footer
+      '<p style="text-align:center;color:#999;font-size:11px;margin-top:8px;">' +
+      'Generado automáticamente por CyberNews Scraper</p>' +
+      '</div></body></html>';
+
     return HtmlService.createHtmlOutput(html)
-      .setTitle("CyberNews \u2013 Noticias adicionales")
+      .setTitle("CyberNews – " + items.length + " noticias adicionales")
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
-  // Health check por defecto
+  // ── Health check (GET sin parámetros) ───────────────────────────────────
   return _jsonResponse(200, "CyberNews Mailer — Web App activo. Usa POST para disparar el envio.");
 }
 

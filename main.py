@@ -192,7 +192,7 @@ def run(
 
     # 8. Renderizar salidas
     renderer = Renderer(output_dir=output_dir or settings.output_dir)
-    renderer.render_json(ranked)
+    renderer.render_json(ranked, remaining)
     renderer.render_markdown(ranked)
     renderer.render_remaining_md(remaining)
     renderer.render_remaining_html(remaining)

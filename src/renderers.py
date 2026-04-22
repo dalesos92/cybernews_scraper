@@ -66,7 +66,7 @@ class Renderer:
 
     # ── Salidas públicas ──────────────────────────────────────────────
 
-    def render_json(self, ranked: list[RankedNewsItem]) -> Path:
+    def render_json(self, ranked: list[RankedNewsItem], remaining: list | None = None) -> Path:
         """Genera top4_monthly.json."""
         payload = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -94,6 +94,17 @@ class Renderer:
                     ),
                 }
                 for r in ranked
+            ],
+            "remaining_items": [
+                {
+                    "title": item.title,
+                    "url": item.url,
+                    "source": item.source_name,
+                    "published_at": item.published_at.isoformat(),
+                    "score": round(getattr(item, "score", 0), 2),
+                    "keywords_found": item.keywords_found,
+                }
+                for item in (remaining or [])
             ],
         }
         path = self.output_dir / "top4_monthly.json"
