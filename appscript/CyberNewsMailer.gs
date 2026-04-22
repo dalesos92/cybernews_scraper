@@ -143,7 +143,10 @@ function doGet(e) {
 
     var json    = JSON.parse(files.next().getBlob().getDataAsString("utf-8"));
     var items   = json.remaining_items || [];
-    var subject = json.subject || "Noticias de ciberseguridad";
+    var topN    = (json.items || []).length || 0;
+    var subject = topN > 0
+      ? json.subject.replace(/^Top \d+/, "Top " + topN)
+      : (json.subject || "Noticias de ciberseguridad");
     var genAt   = json.generated_at ? json.generated_at.substring(0, 10) : "";
 
     // ── Tarjetas unificadas (una por noticia, compacta) ─────────────────
@@ -400,8 +403,10 @@ function _getSubjectFromJson() {
     return "Top noticias de ciberseguridad - " +
            months[now.getMonth()] + " " + now.getFullYear();
   }
-  var json = JSON.parse(files.next().getBlob().getDataAsString("utf-8"));
-  return json.subject || "Top noticias de ciberseguridad";
+  var json  = JSON.parse(files.next().getBlob().getDataAsString("utf-8"));
+  var topN   = (json.items || []).length || 0;
+  var subject = json.subject || "Top noticias de ciberseguridad";
+  return topN > 0 ? subject.replace(/^Top \d+/, "Top " + topN) : subject;
 }
 
 /**
