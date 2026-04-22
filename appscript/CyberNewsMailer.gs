@@ -146,62 +146,154 @@ function doGet(e) {
     var subject = json.subject || "Noticias de ciberseguridad";
     var genAt   = json.generated_at ? json.generated_at.substring(0, 10) : "";
 
-    // ── Construir tarjetas HTML ──────────────────────────────────────────
+    // ── Tabla resumen ejecutivo (estilo Template C) ──────────────────────
+    var summaryRows = "";
+    var maxScore = 0;
+    for (var s = 0; s < items.length; s++) { if ((items[s].score || 0) > maxScore) maxScore = items[s].score || 0; }
+    if (maxScore === 0) maxScore = 30;
+
+    for (var s = 0; s < items.length; s++) {
+      var it = items[s];
+      var barW = Math.min(Math.round((it.score || 0) / maxScore * 100), 100);
+      var rowBg = (s % 2 === 0) ? "#F0F5FC" : "#ffffff";
+      var shortTitle = it.title.length > 75 ? it.title.substring(0, 75) + "…" : it.title;
+      summaryRows +=
+        '<tr style="background:' + rowBg + ';border-bottom:1px solid #E0E8F2;">' +
+        '<td style="padding:8px 12px;color:#001490;font-weight:bold;text-align:center;">' + (s + 1) + '</td>' +
+        '<td style="padding:8px 12px;">' +
+          '<a href="#noticia-r' + s + '" style="color:#001490;text-decoration:none;font-weight:bold;">' + shortTitle + '</a>' +
+          '<div style="margin-top:4px;"><div style="background:#E0E8F2;border-radius:2px;height:4px;width:100%;max-width:200px;">' +
+            '<div style="background:#84C8FC;height:4px;border-radius:2px;width:' + barW + '%;"></div>' +
+          '</div></div>' +
+        '</td>' +
+        '<td style="padding:8px 12px;color:#6B8BA4;white-space:nowrap;font-size:11.5px;">' + (it.source || "") + '</td>' +
+        '<td style="padding:8px 12px;text-align:right;font-weight:bold;white-space:nowrap;">' +
+          '<span style="color:#001490;">' + (it.score || 0).toFixed(1) + '</span>' +
+        '</td>' +
+        '</tr>';
+    }
+
+    // ── Tarjetas de detalle (estilo Template C) ──────────────────────────
     var cards = "";
     if (items.length === 0) {
-      cards = '<p style="color:#666;text-align:center;padding:40px 0;">No hay noticias adicionales en este período.</p>';
+      cards = '<p style="color:#6B8BA4;text-align:center;padding:40px 0;">No hay noticias adicionales en este período.</p>';
     } else {
       for (var i = 0; i < items.length; i++) {
-        var it   = items[i];
-        var kws  = (it.keywords_found || []).slice(0, 4).map(function(k) {
-          return '<span style="background:#E8F0FE;color:#001490;padding:2px 8px;' +
-                 'border-radius:10px;font-size:11px;margin-right:4px;">' + k + '</span>';
+        var it  = items[i];
+        var kws = (it.keywords_found || []).slice(0, 4).map(function(k) {
+          return '<span style="background:#EBF3FF;color:#2A7EC8;border:1px solid #B8D8F8;' +
+                 'padding:1px 6px;border-radius:2px;font-size:10.5px;margin-right:2px;">' + k + '</span>';
         }).join("");
         var date = it.published_at ? it.published_at.substring(0, 10) : "";
-        cards += '<div style="background:#fff;border:1px solid #D0DCE8;border-radius:6px;' +
-                 'padding:16px 20px;margin-bottom:12px;">' +
-                 '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">' +
-                 '<a href="' + it.url + '" target="_blank" ' +
-                 'style="color:#001490;font-weight:bold;font-size:14px;text-decoration:none;line-height:1.4;">' +
-                 it.title + '</a>' +
-                 '<span style="background:#F0F5FC;color:#001490;border:1px solid #001490;' +
-                 'padding:3px 10px;border-radius:3px;font-size:11px;white-space:nowrap;font-weight:bold;">' +
-                 (it.score || 0).toFixed(1) + ' pts</span></div>' +
-                 '<div style="margin-top:8px;font-size:12px;color:#666;">' +
-                 '<strong>' + (it.source || "") + '</strong>' +
-                 (date ? ' · ' + date : '') + '</div>' +
-                 (kws ? '<div style="margin-top:6px;">' + kws + '</div>' : '') +
-                 '</div>';
+
+        cards +=
+          '<div id="noticia-r' + i + '" style="background:#F8FAFD;border:1px solid #D8E4F0;' +
+          'border-radius:6px;overflow:hidden;margin-bottom:12px;">' +
+
+          // Cabecera tarjeta
+          '<div style="background:#F0F5FC;padding:14px 18px 12px;border-bottom:1px solid #D8E4F0;">' +
+            '<span style="display:inline-block;background:#001490;color:#fff;border-radius:50%;' +
+            'width:22px;height:22px;font-size:11px;font-weight:bold;text-align:center;' +
+            'line-height:22px;margin-right:8px;vertical-align:middle;">' + (i + 1) + '</span>' +
+            '<a href="' + it.url + '" target="_blank" ' +
+            'style="color:#001490;text-decoration:none;font-size:14px;font-weight:bold;' +
+            'line-height:1.35;vertical-align:middle;">' + it.title + '</a>' +
+            '<p style="margin:8px 0 0 30px;font-size:11.5px;color:#6B8BA4;">' +
+              '<strong style="background:#E8F0FF;color:#001490;padding:2px 7px;border-radius:3px;">' + (it.source || "") + '</strong>' +
+              (date ? ' &nbsp;·&nbsp; ' + date : '') +
+              ' &nbsp;·&nbsp; <strong style="color:#84C8FC;">' + (it.score || 0).toFixed(1) + ' pts</strong>' +
+              (kws ? ' &nbsp;·&nbsp; ' + kws : '') +
+            '</p>' +
+          '</div>' +
+
+          // CTA
+          '<div style="padding:10px 18px;background:#F0F5FC;border-top:1px solid #D8E4F0;text-align:right;">' +
+            '<a href="' + it.url + '" target="_blank" ' +
+            'style="display:inline-block;background:#001490;color:#fff;padding:5px 16px;' +
+            'border-radius:3px;font-size:11.5px;text-decoration:none;font-weight:bold;">' +
+            'Leer artículo →</a>' +
+          '</div>' +
+          '</div>';
       }
     }
 
+    // ── HTML completo estilo Template C ─────────────────────────────────
     var html =
       '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">' +
       '<meta name="viewport" content="width=device-width,initial-scale=1">' +
       '<title>CyberNews – Noticias adicionales</title></head>' +
-      '<body style="margin:0;padding:0;background:#EEF3F9;font-family:Arial,sans-serif;">' +
-      '<div style="max-width:720px;margin:0 auto;padding:28px 16px;">' +
+      '<body style="margin:0;padding:0;background:#EEF3F9;font-family:Arial,Helvetica,sans-serif;">' +
+
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF3F9;padding:28px 0;">' +
+      '<tr><td align="center">' +
+      '<table role="presentation" width="700" cellpadding="0" cellspacing="0" ' +
+      'style="max-width:700px;background:#ffffff;border-radius:8px;overflow:hidden;border:1px solid #D0DCE8;">' +
+
+      // Banda tricolor superior
+      '<tr><td style="padding:0;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' +
+          '<tr><td style="height:6px;background:#001490;width:60%;"></td>' +
+               '<td style="height:6px;background:#84C8FC;width:40%;"></td></tr>' +
+        '</table>' +
+      '</td></tr>' +
 
       // Header
-      '<div style="background:#001490;border-radius:8px 8px 0 0;padding:20px 28px;">' +
-      '<div style="color:#84C8FC;font-size:11px;font-weight:bold;letter-spacing:1px;' +
-      'text-transform:uppercase;margin-bottom:4px;">BBVA Ciberseguridad</div>' +
-      '<h1 style="color:#fff;margin:0;font-size:20px;">Más noticias recopiladas</h1>' +
-      '<p style="color:#84C8FC;margin:4px 0 0;font-size:13px;">' + subject +
-      (genAt ? ' · ' + genAt : '') + '</p></div>' +
+      '<tr><td style="padding:22px 36px 18px;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' +
+          '<td style="vertical-align:middle;">' +
+            '<span style="color:#6B8BA4;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;">Ciberseguridad</span><br>' +
+            '<h1 style="color:#1A1A2E;margin:10px 0 0;font-size:20px;font-weight:bold;line-height:1.3;' +
+            'border-bottom:2px solid #EEF3F9;padding-bottom:14px;">Más noticias recopiladas</h1>' +
+          '</td>' +
+          '<td style="text-align:right;vertical-align:top;">' +
+            '<p style="color:#6B8BA4;font-size:11px;margin:0;">' + genAt + '</p>' +
+          '</td>' +
+        '</tr></table>' +
+      '</td></tr>' +
 
-      // Contador
-      '<div style="background:#fff;border-left:1px solid #D0DCE8;border-right:1px solid #D0DCE8;' +
-      'padding:12px 20px;font-size:13px;color:#666;">' +
-      '<strong style="color:#001490;">' + items.length + '</strong> noticias adicionales</div>' +
+      // Tabla resumen ejecutivo
+      '<tr><td style="padding:0 36px 8px;">' +
+        '<p style="color:#6B8BA4;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;font-weight:bold;">' +
+          'Resumen ejecutivo — ' + items.length + ' noticias adicionales</p>' +
+        '<p style="color:#6B8BA4;font-size:12px;margin:0 0 10px;">' + subject + '</p>' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12.5px;">' +
+          '<thead><tr style="background:#001490;">' +
+            '<th style="padding:8px 12px;color:#fff;text-align:left;font-weight:bold;width:24px;">#</th>' +
+            '<th style="padding:8px 12px;color:#fff;text-align:left;font-weight:bold;">Amenaza</th>' +
+            '<th style="padding:8px 12px;color:#fff;text-align:left;font-weight:bold;white-space:nowrap;">Fuente</th>' +
+            '<th style="padding:8px 12px;color:#84C8FC;text-align:right;font-weight:bold;white-space:nowrap;">Score</th>' +
+          '</tr></thead>' +
+          '<tbody>' + summaryRows + '</tbody>' +
+        '</table>' +
+      '</td></tr>' +
 
-      // Lista
-      '<div style="padding:16px 0;">' + cards + '</div>' +
+      // Separador
+      '<tr><td style="padding:16px 36px 0;">' +
+        '<div style="height:1px;background:#D0DCE8;"></div>' +
+        '<p style="color:#6B8BA4;font-size:11px;text-transform:uppercase;letter-spacing:1px;margin:14px 0 0;font-weight:bold;">Detalle de artículos</p>' +
+      '</td></tr>' +
 
-      // Footer
-      '<p style="text-align:center;color:#999;font-size:11px;margin-top:8px;">' +
-      'Generado automáticamente por CyberNews Scraper</p>' +
-      '</div></body></html>';
+      // Tarjetas
+      '<tr><td style="padding:12px 36px 20px;">' + cards + '</td></tr>' +
+
+      // Banda tricolor inferior + footer
+      '<tr><td style="padding:0;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' +
+          '<tr><td style="height:4px;background:#84C8FC;width:40%;"></td>' +
+               '<td style="height:4px;background:#001490;width:60%;"></td></tr>' +
+        '</table>' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFD;">' +
+          '<tr><td style="padding:14px 36px;">' +
+            '<p style="color:#8A9BB0;font-size:11px;margin:0;text-align:center;line-height:1.7;">' +
+              'BBVA Ciberseguridad &nbsp;·&nbsp; Informe generado automáticamente<br>' +
+              'Fuentes verificadas en español &nbsp;·&nbsp; <span style="color:#84C8FC;">CyberNews Scraper</span>' +
+            '</p>' +
+          '</td></tr>' +
+        '</table>' +
+      '</td></tr>' +
+
+      '</table></td></tr></table>' +
+      '</body></html>';
 
     return HtmlService.createHtmlOutput(html)
       .setTitle("CyberNews – " + items.length + " noticias adicionales")
