@@ -55,7 +55,8 @@ class Settings(BaseSettings):
     google_drive_folder_id: Optional[str] = None
     # ID del Google Sheet con destinatarios (usado solo como referencia/doc)
     google_sheets_recipients_id: Optional[str] = None
-    # Template a usar para el email Drive: a | b | c  (default: a)
+    # Template a usar para el email Drive: a | b | c | d  (default: c)
+    # d = Executive Brief (alta dirección, sin jerga técnica)
     google_email_template: str = "c"
     # URL del Web App de Apps Script (endpoint doPost)
     google_appscript_webhook_url: Optional[str] = None

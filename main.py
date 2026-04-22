@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from src.config import settings
 from src.dedup import deduplicate, filter_already_sent
 from src.drive_uploader import upload_artifacts
-from src.enricher import enrich_ranked
+from src.enricher import enrich_executive, enrich_ranked
 from src.enricher import _clean_summary
 from src.models import NewsItem, RankedNewsItem
 from src.ranking import rank_items
@@ -189,6 +189,10 @@ def run(
     # 7. Enriquecer con análisis estructurado (afectados, cifras, qué pasó, mitigación)
     logger.info("Enriqueciendo top-%d con análisis estructurado...", len(ranked))
     enrich_ranked(ranked)
+
+    # 7b. Generar análisis ejecutivo (alta dirección, sin jerga técnica)
+    logger.info("Generando análisis ejecutivo para top-%d...", len(ranked))
+    enrich_executive(ranked)
 
     # 8. Renderizar salidas
     renderer = Renderer(output_dir=output_dir or settings.output_dir)

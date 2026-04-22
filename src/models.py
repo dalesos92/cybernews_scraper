@@ -19,6 +19,35 @@ class StructuredInsight(BaseModel):
     insight_dev: str = ""  # Takeaway clave para equipos de desarrollo
 
 
+class ExecutiveInsight(BaseModel):
+    """Análisis ejecutivo no técnico de una noticia de ciberseguridad.
+
+    Pensado para alta dirección: lenguaje de negocio, sin jerga técnica.
+    """
+
+    nivel_riesgo: str = "MEDIO"
+    # CRÍTICO / ALTO / MEDIO / BAJO
+
+    porcentaje_afectacion: int = 0
+    # Estimación del impacto operativo (0-100 %)
+
+    segmento: str = ""
+    # Área de negocio más expuesta: Continuidad Operativa, Protección de Datos,
+    # Fraude Financiero, Infraestructura TI, Reputación Digital, Cumplimiento
+
+    impacto_negocio: str = ""
+    # Descripción ejecutiva del impacto en continuidad del negocio (sin jerga)
+
+    riesgo_reputacional: str = ""
+    # Consecuencias para la imagen institucional y la confianza de clientes
+
+    perdida_potencial: str = ""
+    # Estimación cualitativa/cuantitativa de la pérdida económica
+
+    accion_directiva: str = ""
+    # Acción recomendada a nivel directivo (no técnica)
+
+
 class NewsItem(BaseModel):
     """Representa una noticia de ciberseguridad recopilada de una fuente."""
 
@@ -31,8 +60,10 @@ class NewsItem(BaseModel):
     keywords_found: list[str] = Field(default_factory=list)
     # Resumen en español: generado por plantilla o LLM
     summary_es: str = ""
-    # Desglose estructurado generado por el enriquecedor
+    # Desglose estructurado generado por el enriquecedor (técnico)
     insight: Optional[StructuredInsight] = None
+    # Análisis ejecutivo generado por el enriquecedor (no técnico)
+    executive_insight: Optional[ExecutiveInsight] = None
 
     @field_validator("published_at", mode="before")
     @classmethod

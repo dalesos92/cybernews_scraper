@@ -20,7 +20,7 @@ import unicodedata
 from bs4 import BeautifulSoup
 
 from src.config import settings
-from src.models import NewsItem, RankedNewsItem, StructuredInsight
+from src.models import ExecutiveInsight, NewsItem, RankedNewsItem, StructuredInsight
 
 logger = logging.getLogger(__name__)
 
@@ -517,3 +517,211 @@ Texto del artículo: {article_text[:2000]}"""
         data = json.loads(resp.choices[0].message.content)
         item.insight = StructuredInsight(**data)
         logger.info("[OpenAI Enricher] ✓ %s", item.title[:50])
+
+
+# ── Enriquecimiento ejecutivo (alta dirección) ────────────────────────
+
+# Orden de prioridad: el primer match gana el nivel de riesgo
+_EXECUTIVE_RISK_LEVELS: list[tuple[str, str, int]] = [
+    # (keyword, nivel_riesgo, porcentaje_afectacion)
+    ("ransomware",              "CRÍTICO", 90),
+    ("remote code execution",   "CRÍTICO", 88),
+    ("rce",                     "CRÍTICO", 88),
+    ("supply chain attack",     "CRÍTICO", 85),
+    ("zero-day",                "CRÍTICO", 83),
+    ("zero day",                "CRÍTICO", 83),
+    ("0-day",                   "CRÍTICO", 83),
+    ("malicious package",       "CRÍTICO", 80),
+    ("dependency confusion",    "CRÍTICO", 80),
+    ("backdoor",                "ALTO",    72),
+    ("data breach",             "ALTO",    70),
+    ("authentication bypass",   "ALTO",    68),
+    ("privilege escalation",    "ALTO",    67),
+    ("critical vulnerability",  "ALTO",    65),
+    ("supply chain",            "ALTO",    65),
+    ("unauthenticated",         "ALTO",    63),
+    ("apt",                     "ALTO",    62),
+    ("breach",                  "ALTO",    60),
+    ("exploit",                 "ALTO",    58),
+    ("injection",               "MEDIO",   48),
+    ("phishing",                "MEDIO",   45),
+    ("malware",                 "MEDIO",   43),
+    ("vulnerability",           "MEDIO",   40),
+    ("api key",                 "MEDIO",   38),
+    ("credential",              "MEDIO",   38),
+    ("leak",                    "MEDIO",   35),
+    ("exposed",                 "MEDIO",   33),
+    ("patch",                   "BAJO",    20),
+    ("update",                  "BAJO",    15),
+    ("advisory",                "BAJO",    12),
+]
+
+# keyword → segmento de negocio (primer match gana)
+_EXECUTIVE_SEGMENT: list[tuple[str, str]] = [
+    ("ransomware",            "Continuidad Operativa"),
+    ("remote code execution", "Continuidad Operativa"),
+    ("rce",                   "Continuidad Operativa"),
+    ("supply chain attack",   "Infraestructura TI"),
+    ("supply chain",          "Infraestructura TI"),
+    ("zero-day",              "Infraestructura TI"),
+    ("zero day",              "Infraestructura TI"),
+    ("0-day",                 "Infraestructura TI"),
+    ("malicious package",     "Infraestructura TI"),
+    ("dependency confusion",  "Infraestructura TI"),
+    ("backdoor",              "Infraestructura TI"),
+    ("data breach",           "Protección de Datos"),
+    ("breach",                "Protección de Datos"),
+    ("leak",                  "Protección de Datos"),
+    ("exposed",               "Protección de Datos"),
+    ("credential",            "Protección de Datos"),
+    ("api key",               "Protección de Datos"),
+    ("phishing",              "Fraude Financiero"),
+    ("authentication bypass", "Gestión de Accesos"),
+    ("privilege escalation",  "Gestión de Accesos"),
+    ("vulnerability",         "Infraestructura TI"),
+    ("malware",               "Infraestructura TI"),
+    ("inject",                "Infraestructura TI"),
+    ("apt",                   "Ciberespionaje"),
+    ("patch",                 "Infraestructura TI"),
+]
+
+# nivel_riesgo → texto de impacto de negocio (plantilla base)
+_IMPACTO_NEGOCIO: dict[str, str] = {
+    "CRÍTICO": (
+        "Amenaza de primer orden con capacidad de paralizar operaciones. "
+        "Puede comprometer la disponibilidad de servicios críticos, "
+        "bloquear el acceso a sistemas internos y exigir recursos de respuesta inmediata. "
+        "Requiere activación del plan de continuidad de negocio."
+    ),
+    "ALTO": (
+        "Riesgo significativo para la integridad de la información o la disponibilidad "
+        "de servicios. Puede derivar en pérdida de datos sensibles, interrupción "
+        "temporal de operaciones o exposición no autorizada de información confidencial."
+    ),
+    "MEDIO": (
+        "Incidente de relevancia moderada que, si no se gestiona adecuadamente, "
+        "puede escalar. No compromete operaciones de forma inmediata, pero representa "
+        "una ventana de oportunidad para actores maliciosos si no se cierra a tiempo."
+    ),
+    "BAJO": (
+        "Evento informativo o de bajo riesgo directo. "
+        "No requiere acción urgente, pero es recomendable hacer seguimiento "
+        "para anticipar posibles amenazas futuras relacionadas."
+    ),
+}
+
+# nivel_riesgo → riesgo reputacional
+_RIESGO_REPUTACIONAL: dict[str, str] = {
+    "CRÍTICO": (
+        "Exposición pública elevada. Riesgo severo de daño a la imagen institucional, "
+        "pérdida de confianza de clientes y cobertura mediática negativa."
+    ),
+    "ALTO": (
+        "Posible cobertura en medios especializados. Puede generar desconfianza "
+        "entre clientes y socios si se conoce externamente."
+    ),
+    "MEDIO": (
+        "Impacto reputacional contenido si la situación se gestiona y comunica "
+        "de forma proactiva y transparente."
+    ),
+    "BAJO": (
+        "Riesgo reputacional bajo. Seguimiento preventivo recomendado."
+    ),
+}
+
+# nivel_riesgo → pérdida potencial estimada
+_PERDIDA_POTENCIAL: dict[str, str] = {
+    "CRÍTICO": (
+        "Pérdida potencial: millones de euros "
+        "(paralización operativa, posibles rescates, sanciones regulatorias, "
+        "litigios y costes de respuesta a incidente)."
+    ),
+    "ALTO": (
+        "Pérdida potencial: cientos de miles de euros "
+        "(respuesta al incidente, compensaciones a clientes, "
+        "pérdida de negocio y posibles multas regulatorias)."
+    ),
+    "MEDIO": (
+        "Pérdida potencial: decenas de miles de euros "
+        "(remediación, tiempo de equipos especializados, "
+        "posibles sanciones menores)."
+    ),
+    "BAJO": (
+        "Impacto económico directo bajo si se atiende en los plazos habituales."
+    ),
+}
+
+# nivel_riesgo → acción directiva recomendada
+_ACCION_DIRECTIVA: dict[str, str] = {
+    "CRÍTICO": (
+        "Convocar al Comité de Crisis de Ciberseguridad. Activar el Plan de "
+        "Continuidad de Negocio. Designar responsable ejecutivo del incidente. "
+        "Evaluar notificación regulatoria y a clientes en menos de 24 horas."
+    ),
+    "ALTO": (
+        "Informar al Comité de Dirección y al CISO. Solicitar evaluación urgente "
+        "del impacto sobre los activos propios. Definir plan de remediación "
+        "con fechas comprometidas en los próximos 3-5 días."
+    ),
+    "MEDIO": (
+        "Trasladar al equipo de Seguridad para análisis de afectación. "
+        "Incluir en el próximo ciclo de revisión de riesgos. "
+        "Asegurar que los controles preventivos están activos."
+    ),
+    "BAJO": (
+        "Registrar en el inventario de amenazas. Revisar en el informe mensual "
+        "de ciberseguridad. No requiere acción inmediata."
+    ),
+}
+
+
+def build_executive_insight(item: NewsItem) -> ExecutiveInsight:
+    """Genera el análisis ejecutivo no técnico para un NewsItem.
+
+    La lógica es puramente heurística (sin LLM): mapea las keywords
+    ya detectadas a niveles de riesgo, segmentos de negocio y textos
+    ejecutivos predefinidos.
+    """
+    kws = set(item.keywords_found)
+    text_low = f"{item.title} {item.summary}".lower()
+
+    # ── Nivel de riesgo y % de afectación ─────────────────────────────
+    nivel_riesgo = "BAJO"
+    porcentaje = 12
+    for kw, nivel, pct in _EXECUTIVE_RISK_LEVELS:
+        if kw in kws or kw in text_low:
+            nivel_riesgo = nivel
+            porcentaje = pct
+            break
+
+    # ── Segmento de negocio ───────────────────────────────────────────
+    segmento = "Infraestructura TI"
+    for kw, seg in _EXECUTIVE_SEGMENT:
+        if kw in kws or kw in text_low:
+            segmento = seg
+            break
+
+    return ExecutiveInsight(
+        nivel_riesgo=nivel_riesgo,
+        porcentaje_afectacion=porcentaje,
+        segmento=segmento,
+        impacto_negocio=_IMPACTO_NEGOCIO[nivel_riesgo],
+        riesgo_reputacional=_RIESGO_REPUTACIONAL[nivel_riesgo],
+        perdida_potencial=_PERDIDA_POTENCIAL[nivel_riesgo],
+        accion_directiva=_ACCION_DIRECTIVA[nivel_riesgo],
+    )
+
+
+def enrich_executive(ranked: list[RankedNewsItem]) -> None:
+    """Genera el análisis ejecutivo in-place para todos los ítems del ranking."""
+    for r in ranked:
+        try:
+            r.item.executive_insight = build_executive_insight(r.item)
+        except Exception as exc:
+            logger.error(
+                "[Executive Enricher] Error en '%s': %s", r.item.title[:50], exc
+            )
+            r.item.executive_insight = ExecutiveInsight(
+                nivel_riesgo="MEDIO",
+                impacto_negocio=r.item.summary[:200],
+            )

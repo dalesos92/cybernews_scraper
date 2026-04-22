@@ -329,6 +329,7 @@ class Renderer:
             "a": "email_bbva_a.html.j2",
             "b": "email_bbva_b.html.j2",
             "c": "email_bbva_c.html.j2",
+            "d": "email_bbva_d.html.j2",
         }
         tpl_name = tpl_map.get(tpl_key, "email.html.j2")
         # URL pública de noticias adicionales (Web App de Apps Script + ?page=remaining)
