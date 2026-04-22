@@ -303,12 +303,29 @@ def _trigger_appscript_send() -> None:
     payload = {"token": settings.google_appscript_token or ""}
     try:
         import httpx
-        resp = httpx.post(
+        # Apps Script redirige POST con 302; seguimos manualmente para conservar POST
+        r0 = httpx.post(
             settings.google_appscript_webhook_url,
             json=payload,
             timeout=30,
-            follow_redirects=True,
+            follow_redirects=False,
         )
+        if r0.status_code in (301, 302, 303, 307, 308) and "location" in r0.headers:
+            resp = httpx.post(
+                r0.headers["location"],
+                json=payload,
+                timeout=30,
+                follow_redirects=True,
+            )
+        else:
+            resp = r0
+        if resp.status_code == 401:
+            logger.error(
+                "Apps Script Web App devolvió 401. "
+                "Verifica que el despliegue tenga acceso 'Cualquier persona' (no 'Cualquier usuario de Google') "
+                "y que la URL termine en /exec (no /dev)."
+            )
+            return
         data = resp.json()
         if data.get("status") == 200:
             logger.info("Apps Script: %s", data.get("message", "OK"))
