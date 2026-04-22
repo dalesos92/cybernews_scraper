@@ -141,13 +141,14 @@ function doGet(e) {
       ).setTitle("CyberNews – Noticias adicionales");
     }
 
-    var json    = JSON.parse(files.next().getBlob().getDataAsString("utf-8"));
-    var items   = json.remaining_items || [];
-    var topN    = (json.items || []).length || 0;
-    var subject = topN > 0
+    var json         = JSON.parse(files.next().getBlob().getDataAsString("utf-8"));
+    var items        = json.remaining_items || [];
+    var topN         = (json.items || []).length || 0;
+    var emailSubject = topN > 0
       ? json.subject.replace(/^Top \d+/, "Top " + topN)
       : (json.subject || "Noticias de ciberseguridad");
-    var genAt   = json.generated_at ? json.generated_at.substring(0, 10) : "";
+    var pageSubject  = items.length + " noticias adicionales al " + emailSubject;
+    var genAt        = json.generated_at ? json.generated_at.substring(0, 10) : "";
 
     // ── Tarjetas unificadas (una por noticia, compacta) ─────────────────
     var cards = "";
@@ -232,8 +233,7 @@ function doGet(e) {
             '<h1 style="color:#1A1A2E;margin:10px 0 4px;font-size:20px;font-weight:bold;line-height:1.3;">' +
               'Más noticias recopiladas</h1>' +
             '<p style="color:#6B8BA4;font-size:12px;margin:0 0 12px;border-bottom:2px solid #EEF3F9;padding-bottom:14px;">' +
-              subject + (genAt ? ' &nbsp;·&nbsp; ' + genAt : '') +
-              ' &nbsp;·&nbsp; <strong style="color:#001490;">' + items.length + '</strong> artículos</p>' +
+              pageSubject + (genAt ? ' &nbsp;·&nbsp; ' + genAt : '') + '</p>' +
           '</td>' +
         '</tr></table>' +
       '</td></tr>' +
@@ -261,7 +261,7 @@ function doGet(e) {
       '</body></html>';
 
     return HtmlService.createHtmlOutput(html)
-      .setTitle("CyberNews – " + items.length + " noticias adicionales")
+      .setTitle("CyberNews – " + items.length + " noticias adicionales al " + emailSubject)
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
