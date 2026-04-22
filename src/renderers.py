@@ -70,7 +70,9 @@ class Renderer:
         """Genera top4_monthly.json."""
         payload = {
             "generated_at": datetime.now(timezone.utc).isoformat(),
-            "subject": get_subject(),
+            "subject": get_subject().replace(
+                f"Top {settings.top_n}", f"Top {len(ranked)}", 1
+            ),
             "items": [
                 {
                     "rank": r.rank,
