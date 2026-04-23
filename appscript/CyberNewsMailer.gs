@@ -265,11 +265,24 @@ function doGet(e) {
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   }
 
+  // ── Página de envío del informe ejecutivo de Gemini ───────────────────────
+  if (page === "submit") {
+    return _renderSubmitPage();
+  }
+
   // ── Health check (GET sin parámetros) ───────────────────────────────────
   return _jsonResponse(200, "CyberNews Mailer — Web App activo. Usa POST para disparar el envio.");
 }
 
 function doPost(e) {
+
+  // ── Modo A: formulario web con JSON de Gemini (source=gemini_form) ────────
+  // El formulario de ?page=submit envía application/x-www-form-urlencoded
+  if (e.parameter && e.parameter.source === "gemini_form") {
+    return _handleGeminiFormPost(e);
+  }
+
+  // ── Modo B: webhook JSON de Python (legacy) ───────────────────────────────
   // 1. Parsear cuerpo JSON
   var receivedToken = "";
   try {
@@ -518,4 +531,503 @@ function showRecipients() {
     return;
   }
   _showAlert("Destinatarios activos (" + list.length + "):\n\n" + list.join("\n"));
+}
+
+// =============================================================================
+// INFORME EJECUTIVO VÍA GEMINI — Formulario + Renderer
+// =============================================================================
+
+/**
+ * Renderiza la página de formulario (?page=submit).
+ * El usuario pega aquí el JSON producido por el Gem de Gemini.
+ */
+function _renderSubmitPage() {
+  var tokenHint = "El token es el mismo que usas para el webhook de Python (GOOGLE_APPSCRIPT_TOKEN).";
+  var html =
+    '<!DOCTYPE html><html lang="es"><head>' +
+    '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>CyberNews BBVA — Enviar informe ejecutivo</title>' +
+    '<style>' +
+      'body{margin:0;padding:0;background:#EEF3F9;font-family:Arial,Helvetica,sans-serif;}' +
+      '.wrap{max-width:680px;margin:32px auto;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #D0DCE8;}' +
+      '.hdr{background:#001490;padding:22px 28px;}' +
+      '.hdr h1{color:#fff;margin:0;font-size:18px;font-weight:bold;}' +
+      '.hdr p{color:#84C8FC;margin:6px 0 0;font-size:12px;}' +
+      '.body{padding:28px;}' +
+      'label{display:block;color:#001490;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}' +
+      'input[type=text],textarea{width:100%;box-sizing:border-box;border:1px solid #D0DCE8;border-radius:4px;padding:10px 12px;font-size:13px;font-family:Courier New,monospace;color:#1a1a2e;background:#F8FAFC;margin-bottom:20px;}' +
+      'textarea{height:320px;resize:vertical;}' +
+      'button{background:#001490;color:#fff;border:none;border-radius:4px;padding:13px 28px;font-size:15px;font-weight:bold;cursor:pointer;width:100%;}' +
+      'button:hover{background:#0022B8;}' +
+      '.note{background:#F0F5FC;border-radius:4px;padding:12px 16px;color:#6B8BA4;font-size:12px;margin-bottom:20px;line-height:1.6;}' +
+      '.err{background:#FFF0F0;border:1px solid #D0021B;border-radius:4px;padding:12px 16px;color:#D0021B;font-size:13px;margin-bottom:16px;display:none;}' +
+    '</style></head><body>' +
+    '<div class="wrap">' +
+      '<div class="hdr">' +
+        '<h1>📤 Enviar informe ejecutivo de ciberseguridad</h1>' +
+        '<p>Pega el JSON producido por el Gem de Gemini y envía el comunicado</p>' +
+      '</div>' +
+      '<div class="body">' +
+        '<div class="note">' +
+          '<strong>¿Cómo obtener el JSON?</strong><br>' +
+          '1. Abre el Doc generado automáticamente el día 1 del mes.<br>' +
+          '2. Copia el bloque JSON y pégalo en el Gem de Gemini.<br>' +
+          '3. Copia TODA la respuesta de Gemini (desde <code>{</code> hasta el último <code>}</code>).<br>' +
+          '4. Pégala en el campo de abajo y haz clic en Enviar.' +
+        '</div>' +
+        '<div id="errBox" class="err"></div>' +
+        '<form method="POST" onsubmit="return validateForm()">' +
+          '<input type="hidden" name="source" value="gemini_form">' +
+          '<label for="tok">Token de autenticación</label>' +
+          '<input type="text" id="tok" name="token" placeholder="Ej: a1b2c3d4-...-..." required>' +
+          '<label for="gj">JSON de respuesta de Gemini</label>' +
+          '<textarea id="gj" name="gemini_json" placeholder=\'{"informe":{...},"noticias":[...],"webhook_url":"..."}\' required></textarea>' +
+          '<button type="submit">🚀 Enviar comunicado ejecutivo a destinatarios</button>' +
+        '</form>' +
+      '</div>' +
+    '</div>' +
+    '<script>' +
+      'function validateForm(){' +
+        'var j=document.getElementById("gj").value.trim();' +
+        'try{JSON.parse(j);}catch(e){' +
+          'var b=document.getElementById("errBox");' +
+          'b.style.display="block";' +
+          'b.textContent="El texto no es JSON válido: "+e.message;' +
+          'return false;}' +
+        'return true;}' +
+    '</script>' +
+    '</body></html>';
+
+  return HtmlService.createHtmlOutput(html)
+    .setTitle("CyberNews BBVA — Enviar informe ejecutivo")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/**
+ * Maneja el POST del formulario de envío de Gemini.
+ * e.parameter.token       → token de autenticación
+ * e.parameter.gemini_json → JSON completo de respuesta del Gem
+ */
+function _handleGeminiFormPost(e) {
+  // 1. Autenticar
+  var expectedToken = PropertiesService.getScriptProperties()
+                        .getProperty(CONFIG.TOKEN_PROPERTY);
+  if (!expectedToken) {
+    return _renderResultPage(false, "Token no configurado. Ejecuta setupWebhookToken() primero.");
+  }
+  var token = (e.parameter && e.parameter.token) ? e.parameter.token.trim() : "";
+  if (token !== expectedToken) {
+    return _renderResultPage(false, "Token incorrecto. Verifica tu GOOGLE_APPSCRIPT_TOKEN.");
+  }
+
+  // 2. Parsear JSON de Gemini
+  var jsonText = (e.parameter && e.parameter.gemini_json) ? e.parameter.gemini_json.trim() : "";
+  if (!jsonText) {
+    return _renderResultPage(false, "El campo de JSON está vacío.");
+  }
+
+  var report;
+  try {
+    report = JSON.parse(jsonText);
+  } catch (err) {
+    return _renderResultPage(false, "El JSON no es válido: " + err.message);
+  }
+
+  // 3. Validación básica de estructura
+  if (!report.noticias || !Array.isArray(report.noticias) || report.noticias.length === 0) {
+    return _renderResultPage(false,
+      "El JSON no tiene el campo 'noticias' o está vacío. " +
+      "Asegúrate de copiar toda la respuesta del Gem.");
+  }
+  if (!report.informe) {
+    return _renderResultPage(false, "El JSON no tiene el campo 'informe'. Copia toda la respuesta del Gem.");
+  }
+
+  // 4. Obtener destinatarios
+  var recipients;
+  try {
+    recipients = _getRecipients();
+  } catch (err) {
+    return _renderResultPage(false, "Error al leer destinatarios: " + err.message);
+  }
+  if (recipients.length === 0) {
+    return _renderResultPage(false, "No hay destinatarios activos en el Sheet. Revisa la hoja \"Destinatarios\".");
+  }
+
+  // 5. Renderizar HTML ejecutivo
+  var htmlBody, subject;
+  try {
+    htmlBody = _renderExecutiveHTML(report);
+    var periodo = (report.informe && report.informe.periodo) ? report.informe.periodo : "";
+    subject  = "Informe ejecutivo de ciberseguridad — " + periodo;
+  } catch (err) {
+    Logger.log("_renderExecutiveHTML error: " + err.message);
+    return _renderResultPage(false, "Error al generar el HTML del email: " + err.message);
+  }
+
+  // 6. Guardar HTML en Drive (para historial)
+  try {
+    var folder = DriveApp.getFolderById(CONFIG.DRIVE_FOLDER_ID);
+    var existing = folder.getFilesByName("top4_email_executive.html");
+    while (existing.hasNext()) { existing.next().setTrashed(true); }
+    folder.createFile("top4_email_executive.html", htmlBody, MimeType.HTML);
+  } catch (err) {
+    Logger.log("No se pudo guardar el HTML en Drive: " + err.message);
+    // No fatal — continuamos con el envío
+  }
+
+  // 7. Enviar emails
+  var sent = 0;
+  var errors = [];
+  recipients.forEach(function(to) {
+    try {
+      GmailApp.sendEmail(to, subject, "", {
+        from:     CONFIG.SENDER_ALIAS,
+        name:     CONFIG.SENDER_NAME,
+        htmlBody: htmlBody,
+        charset:  "UTF-8",
+        noReply:  false
+      });
+      sent++;
+      Logger.log("Enviado a: " + to);
+    } catch (err) {
+      errors.push(to + ": " + err.message);
+      Logger.log("Error enviando a " + to + ": " + err.message);
+    }
+  });
+
+  if (sent > 0) {
+    var msg = "✅ Informe ejecutivo enviado a " + sent + " destinatario(s).";
+    if (errors.length > 0) msg += " Fallaron: " + errors.join("; ");
+    return _renderResultPage(true, msg, report);
+  } else {
+    return _renderResultPage(false, "No se pudo enviar a ningún destinatario: " + errors.join("; "));
+  }
+}
+
+/**
+ * Renderiza el HTML del email ejecutivo a partir del JSON de Gemini.
+ * Produce un email completo en HTML inline-CSS compatible con clientes de correo.
+ */
+function _renderExecutiveHTML(report) {
+  var informe  = report.informe  || {};
+  var noticias = report.noticias || [];
+  var stats    = informe.estadisticas || {};
+  var porNivel = stats.por_nivel_riesgo || {};
+  var porSeg   = stats.por_segmento     || {};
+  var periodo  = informe.periodo        || "";
+  var genAt    = informe.generado_en    ? informe.generado_en.substring(0, 10) : Utilities.formatDate(new Date(), "UTC", "yyyy-MM-dd");
+
+  // ── Contadores de nivel ────────────────────────────────────────────────────
+  var cCritico = porNivel["CRITICO"] || porNivel["CRÍTICO"] || 0;
+  var cAlto    = porNivel["ALTO"]    || 0;
+  var cMedio   = porNivel["MEDIO"]   || 0;
+  var cBajo    = porNivel["BAJO"]    || 0;
+
+  // ── Tabla de segmentos ─────────────────────────────────────────────────────
+  var segRows = "";
+  var segOrder = [
+    "Ransomware y Malware",
+    "Vulnerabilidades Críticas (RCE / Zero-Day)",
+    "Filtración de Datos",
+    "Cadena de Suministro de Software",
+    "Fraude e Ingeniería Social",
+    "Infraestructura y Cloud",
+    "Gestión de Identidad y Acceso"
+  ];
+  segOrder.forEach(function(seg, i) {
+    var count = porSeg[seg] || 0;
+    if (count === 0) return;
+    var bg = i % 2 === 0 ? "#F0F5FC" : "#ffffff";
+    segRows +=
+      '<tr style="background:' + bg + ';border-bottom:1px solid #E8ECF2;">' +
+        '<td style="padding:7px 12px;font-size:12px;color:#1a1a2e;">' + seg + '</td>' +
+        '<td style="padding:7px 12px;font-size:12px;color:#001490;font-weight:bold;text-align:center;width:50px;">' + count + '</td>' +
+      '</tr>';
+  });
+
+  // ── Tarjetas de noticias ───────────────────────────────────────────────────
+  var cards = "";
+  noticias.forEach(function(n) {
+    var nivel = (n.nivel_riesgo || "MEDIO").toUpperCase().replace("CRÍTICO","CRITICO");
+
+    // Colores según nivel
+    var badgeBg, badgeColor, borderColor, cardBg;
+    if (nivel === "CRITICO") {
+      badgeBg = "#D0021B"; badgeColor = "#fff"; borderColor = "#D0021B"; cardBg = "#FFF8F8";
+    } else if (nivel === "ALTO") {
+      badgeBg = "#F5A623"; badgeColor = "#fff"; borderColor = "#F5A623"; cardBg = "#FFFAF4";
+    } else if (nivel === "MEDIO") {
+      badgeBg = "#F8CC1B"; badgeColor = "#5C4A00"; borderColor = "#F8CC1B"; cardBg = "#FDFBF0";
+    } else {
+      badgeBg = "#84C8FC"; badgeColor = "#001490"; borderColor = "#84C8FC"; cardBg = "#F0F5FC";
+    }
+
+    var rango    = n.rango_afectacion_pct || "—";
+    var cifras   = n.cifras_del_incidente || "Sin cifras reportadas en la fuente";
+    var expEco   = n.exposicion_economica || "Sin datos en la fuente";
+    var impCont  = n.impacto_continuidad_negocio || "No evaluable con la información disponible";
+    var impRep   = n.impacto_reputacional        || "No evaluable con la información disponible";
+    var accion   = n.accion_directiva            || "—";
+    var area     = n.area_negocio_impactada       || "—";
+    var segmento = n.segmento_vulnerabilidad      || "—";
+    var descEjec = n.descripcion_ejecutiva        || "";
+
+    cards +=
+      '<tr><td style="padding:0 28px 20px;">' +
+      '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"' +
+        ' style="background:' + cardBg + ';border-radius:6px;border-left:4px solid ' + borderColor + ';border:1px solid #D0DCE8;border-left:4px solid ' + borderColor + ';overflow:hidden;">' +
+
+        // ── Cabecera de tarjeta
+        '<tr><td style="padding:14px 18px 10px;border-bottom:1px solid #E8ECF2;">' +
+          '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' +
+            '<td style="vertical-align:top;">' +
+              // Badges
+              '<span style="display:inline-block;background:' + badgeBg + ';color:' + badgeColor + ';font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;padding:3px 9px;border-radius:3px;margin-right:6px;">' + nivel + '</span>' +
+              '<span style="display:inline-block;background:#EEF3F9;color:#001490;font-size:10px;font-weight:bold;letter-spacing:.5px;padding:3px 9px;border-radius:3px;margin-right:6px;">' + _escHtml(segmento) + '</span>' +
+              '<span style="display:inline-block;background:#F8F0FF;color:#5A00B8;font-size:10px;padding:3px 9px;border-radius:3px;">' + _escHtml(area) + '</span>' +
+              // Título
+              '<div style="margin-top:8px;">' +
+                '<a href="' + (n.url || "#") + '" target="_blank"' +
+                   ' style="color:#1A1A2E;font-size:14px;font-weight:bold;text-decoration:none;line-height:1.4;">' +
+                  (n.rank ? ('#' + n.rank + '. ') : '') + _escHtml(n.titulo || "") +
+                '</a>' +
+              '</div>' +
+              '<div style="margin-top:4px;color:#6B8BA4;font-size:11px;">' +
+                _escHtml(n.fuente || "") + (n.fecha ? ' &nbsp;·&nbsp; ' + n.fecha : '') +
+              '</div>' +
+              // Descripción ejecutiva
+              (descEjec ? '<p style="margin:8px 0 0;color:#1a1a2e;font-size:12.5px;line-height:1.5;">' + _escHtml(descEjec) + '</p>' : '') +
+            '</td>' +
+            // % impacto
+            '<td style="width:88px;text-align:center;vertical-align:middle;padding-left:14px;">' +
+              '<div style="font-size:13px;font-weight:bold;color:' + badgeBg + ';line-height:1.2;">' + _escHtml(rango.split(' ')[0]) + '</div>' +
+              '<div style="font-size:9px;color:#6B8BA4;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;">impacto est.</div>' +
+              '<div style="margin-top:6px;background:#E0E8F2;border-radius:3px;height:4px;">' +
+                '<div style="background:' + badgeBg + ';height:4px;border-radius:3px;width:70%;"></div>' +
+              '</div>' +
+            '</td>' +
+          '</tr></table>' +
+        '</td></tr>' +
+
+        // ── Métricas ejecutivas
+        '<tr><td style="padding:12px 18px;">' +
+          '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px;">' +
+            _metricRow("Impacto operativo",     impCont,  "#001490") +
+            _dividerRow() +
+            _metricRow("Riesgo reputacional",   impRep,   "#001490") +
+            _dividerRow() +
+            _metricRow("Cifras del incidente",  cifras,   "#001490") +
+            _dividerRow() +
+            _metricRow("Exposición económica",  expEco,   "#001490") +
+            _dividerRow() +
+            _metricRow("Acción recomendada",    accion,   "#D0021B", true) +
+          '</table>' +
+        '</td></tr>' +
+
+      '</table>' +
+      '</td></tr>';
+  });
+
+  // ── Resumen ejecutivo ──────────────────────────────────────────────────────
+  var resumenHtml = "";
+  if (informe.resumen_ejecutivo) {
+    resumenHtml =
+      '<tr><td style="padding:0 28px 20px;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"' +
+               ' style="background:#F0F5FC;border-radius:6px;border:1px solid #D0DCE8;">' +
+          '<tr><td style="padding:16px 18px;">' +
+            '<p style="color:#001490;font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:.8px;margin:0 0 8px;">Resumen ejecutivo del período</p>' +
+            '<p style="color:#1a1a2e;font-size:12.5px;line-height:1.6;margin:0;">' + _escHtml(informe.resumen_ejecutivo) + '</p>' +
+          '</td></tr>' +
+        '</table>' +
+      '</td></tr>';
+  }
+
+  // ── HTML completo ──────────────────────────────────────────────────────────
+  return '<!DOCTYPE html><html lang="es"><head>' +
+    '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>Informe ejecutivo de ciberseguridad — ' + _escHtml(periodo) + '</title>' +
+    '</head>' +
+    '<body style="margin:0;padding:0;background:#EEF3F9;font-family:Arial,Helvetica,sans-serif;">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF3F9;padding:24px 0;">' +
+    '<tr><td align="center">' +
+    '<table role="presentation" width="680" cellpadding="0" cellspacing="0"' +
+           ' style="max-width:680px;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #D0DCE8;">' +
+
+      // Banda tricolor
+      '<tr>' +
+        '<td style="height:6px;background:#001490;width:60%;"></td>' +
+        '<td style="height:6px;background:#84C8FC;width:40%;"></td>' +
+      '</tr>' +
+
+      // Header
+      '<tr><td colspan="2" style="padding:22px 28px 18px;border-bottom:1px solid #EEF3F9;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' +
+          '<td>' +
+            '<p style="color:#6B8BA4;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;margin:0 0 4px;">BBVA · Ciberseguridad · Informe Directivo</p>' +
+            '<h1 style="color:#1A1A2E;font-size:20px;font-weight:bold;margin:0 0 4px;">Informe ejecutivo de ciberseguridad</h1>' +
+            '<p style="color:#6B8BA4;font-size:12px;margin:0;">' + _escHtml(periodo) + ' &nbsp;·&nbsp; Generado el ' + genAt + '</p>' +
+          '</td>' +
+        '</tr></table>' +
+        '<p style="color:#6B8BA4;font-size:12px;margin:12px 0 0;border-top:1px solid #EEF3F9;padding-top:12px;">' +
+          'Resumen de amenazas con impacto potencial en la continuidad del negocio, reputación e ingresos.' +
+        '</p>' +
+      '</td></tr>' +
+
+      // KPI dashboard
+      '<tr><td colspan="2" style="padding:20px 28px 8px;">' +
+        '<p style="color:#6B8BA4;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px;font-weight:bold;">Panel de riesgo</p>' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' +
+          '<td style="width:25%;padding-right:8px;">' + _kpiCard(cCritico, "CRÍTICO", "#D0021B", "#FFF0F0") + '</td>' +
+          '<td style="width:25%;padding:0 4px;">'     + _kpiCard(cAlto,    "ALTO",    "#F5A623", "#FFF4EC") + '</td>' +
+          '<td style="width:25%;padding:0 4px;">'     + _kpiCard(cMedio,   "MEDIO",   "#B8960A", "#FFFBEC") + '</td>' +
+          '<td style="width:25%;padding-left:8px;">'  + _kpiCard(cBajo,    "BAJO",    "#001490", "#F0F5FC") + '</td>' +
+        '</tr></table>' +
+      '</td></tr>' +
+
+      // Segmentos (solo si hay datos)
+      (segRows ?
+        '<tr><td colspan="2" style="padding:16px 28px 8px;">' +
+          '<p style="color:#6B8BA4;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;font-weight:bold;">Segmentación por tipo de vulnerabilidad</p>' +
+          '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;border:1px solid #D0DCE8;border-radius:4px;overflow:hidden;">' +
+            '<thead><tr style="background:#001490;">' +
+              '<th style="padding:8px 12px;color:#fff;text-align:left;font-size:11px;">Segmento</th>' +
+              '<th style="padding:8px 12px;color:#84C8FC;text-align:center;font-size:11px;width:50px;">N</th>' +
+            '</tr></thead>' +
+            '<tbody>' + segRows + '</tbody>' +
+          '</table>' +
+        '</td></tr>' : '') +
+
+      // Separador + título sección
+      '<tr><td colspan="2" style="padding:16px 28px 8px;">' +
+        '<div style="height:1px;background:#D0DCE8;"></div>' +
+        '<p style="color:#6B8BA4;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin:12px 0 0;font-weight:bold;">Análisis por amenaza</p>' +
+      '</td></tr>' +
+
+      // Tarjetas
+      cards +
+
+      // Resumen ejecutivo
+      resumenHtml +
+
+      // Nota metodológica
+      '<tr><td colspan="2" style="padding:0 28px 20px;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F0F5FC;border-radius:6px;border:1px solid #D0DCE8;">' +
+          '<tr><td style="padding:12px 16px;">' +
+            '<p style="color:#001490;font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:.8px;margin:0 0 4px;">Nota metodológica</p>' +
+            '<p style="color:#6B8BA4;font-size:11px;margin:0;line-height:1.6;">' +
+              'Los rangos de impacto son estimaciones orientativas basadas en el nivel de riesgo de cada incidente. ' +
+              'Las cifras y datos económicos provienen exclusivamente de las fuentes originales; ' +
+              'cuando no están disponibles se indica «Sin datos en la fuente». ' +
+              'Este informe no constituye una evaluación de riesgo formal para BBVA.' +
+            '</p>' +
+          '</td></tr>' +
+        '</table>' +
+      '</td></tr>' +
+
+      // Footer
+      '<tr><td colspan="2" style="padding:0;">' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0">' +
+          '<tr>' +
+            '<td style="height:4px;background:#001490;width:60%;"></td>' +
+            '<td style="height:4px;background:#84C8FC;width:40%;"></td>' +
+          '</tr>' +
+        '</table>' +
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F8FAFC;">' +
+          '<tr><td style="padding:14px 28px;text-align:center;">' +
+            '<p style="color:#6B8BA4;font-size:11px;margin:0;">' +
+              'BBVA Ciberseguridad · Informe ejecutivo generado con asistencia de IA · ' + genAt +
+            '</p>' +
+          '</td></tr>' +
+        '</table>' +
+      '</td></tr>' +
+
+    '</table>' +
+    '</td></tr></table>' +
+    '</body></html>';
+}
+
+// ── Helpers de renderizado ────────────────────────────────────────────────────
+
+function _kpiCard(count, label, color, bg) {
+  return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"' +
+         ' style="background:' + bg + ';border-radius:6px;border-left:4px solid ' + color + ';">' +
+    '<tr><td style="padding:12px 14px 10px;">' +
+      '<div style="font-size:28px;font-weight:bold;color:' + color + ';line-height:1;">' + count + '</div>' +
+      '<div style="font-size:10px;color:' + color + ';font-weight:bold;text-transform:uppercase;letter-spacing:.8px;margin-top:4px;">' + label + '</div>' +
+    '</td></tr>' +
+  '</table>';
+}
+
+function _metricRow(label, value, labelColor, bold) {
+  return '<tr>' +
+    '<td style="padding:6px 10px 6px 0;vertical-align:top;width:130px;color:' + (labelColor||'#001490') + ';font-weight:bold;font-size:10px;text-transform:uppercase;letter-spacing:.5px;">' + label + '</td>' +
+    '<td style="padding:6px 0;vertical-align:top;color:#1a1a2e;line-height:1.5;' + (bold ? 'font-weight:bold;' : '') + '">' + _escHtml(value) + '</td>' +
+  '</tr>';
+}
+
+function _dividerRow() {
+  return '<tr><td colspan="2" style="height:1px;background:#E8ECF2;padding:0;"></td></tr>';
+}
+
+function _escHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/**
+ * Renderiza una página de resultado (éxito o error) tras el submit del formulario.
+ */
+function _renderResultPage(ok, message, report) {
+  var periodo = (report && report.informe && report.informe.periodo) ? report.informe.periodo : "";
+  var color   = ok ? "#001490" : "#D0021B";
+  var icon    = ok ? "✅" : "❌";
+  var bg      = ok ? "#F0FFF4" : "#FFF0F0";
+  var borderC = ok ? "#00A651" : "#D0021B";
+
+  var statsHtml = "";
+  if (ok && report && report.informe && report.informe.estadisticas) {
+    var s = report.informe.estadisticas;
+    var pn = s.por_nivel_riesgo || {};
+    statsHtml =
+      '<div style="margin-top:16px;background:#F0F5FC;border-radius:6px;padding:14px 18px;">' +
+        '<p style="color:#001490;font-size:11px;font-weight:bold;margin:0 0 8px;">Resumen del informe enviado</p>' +
+        '<p style="color:#1a1a2e;font-size:13px;margin:0;">Período: <strong>' + _escHtml(periodo) + '</strong><br>' +
+        'Noticias: ' + (s.total_analizadas||0) + ' &nbsp;·&nbsp; ' +
+        'Crítico: ' + (pn["CRITICO"]||pn["CRÍTICO"]||0) + ' &nbsp;·&nbsp; ' +
+        'Alto: ' + (pn["ALTO"]||0) + ' &nbsp;·&nbsp; ' +
+        'Medio: ' + (pn["MEDIO"]||0) + ' &nbsp;·&nbsp; ' +
+        'Bajo: ' + (pn["BAJO"]||0) +
+        '</p>' +
+      '</div>';
+  }
+
+  var html =
+    '<!DOCTYPE html><html lang="es"><head>' +
+    '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>CyberNews BBVA — Resultado</title>' +
+    '<style>body{margin:0;padding:0;background:#EEF3F9;font-family:Arial,sans-serif;}' +
+    '.wrap{max-width:600px;margin:48px auto;background:#fff;border-radius:8px;overflow:hidden;border:1px solid #D0DCE8;}' +
+    '.hdr{background:#001490;padding:20px 28px;}' +
+    '.hdr h1{color:#fff;margin:0;font-size:18px;} .hdr p{color:#84C8FC;margin:4px 0 0;font-size:12px;}' +
+    '.body{padding:28px;}' +
+    '.msg{background:' + bg + ';border:1px solid ' + borderC + ';border-radius:6px;padding:16px 18px;color:' + color + ';font-size:14px;font-weight:bold;}' +
+    '.btn{display:inline-block;margin-top:20px;background:#001490;color:#fff;padding:12px 24px;border-radius:4px;text-decoration:none;font-size:14px;font-weight:bold;}' +
+    '</style></head><body>' +
+    '<div class="wrap">' +
+      '<div class="hdr"><h1>CyberNews BBVA</h1><p>Informe ejecutivo de ciberseguridad</p></div>' +
+      '<div class="body">' +
+        '<div class="msg">' + icon + ' ' + _escHtml(message) + '</div>' +
+        statsHtml +
+        '<a class="btn" href="?page=submit">← Volver al formulario</a>' +
+      '</div>' +
+    '</div>' +
+    '</body></html>';
+
+  return HtmlService.createHtmlOutput(html)
+    .setTitle("CyberNews BBVA — Resultado")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
